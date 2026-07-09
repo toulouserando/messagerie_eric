@@ -1,0 +1,6 @@
+{
+  "name": "Messagerie",
+  "description": "Une application de messagerie sécurisée avec tri automatique des messages par dossier.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
