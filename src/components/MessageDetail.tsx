@@ -1,12 +1,13 @@
 import { Message } from '../types';
-import { Mail, Calendar, User, Folder, Trash2, ShieldCheck } from 'lucide-react';
+import { Mail, Calendar, User, Folder, Trash2, ShieldCheck, Reply } from 'lucide-react';
 
 interface MessageDetailProps {
   message: Message | null;
   onDeleteMessage: (id: string) => void;
+  onReplyMessage?: (message: Message) => void;
 }
 
-export default function MessageDetail({ message, onDeleteMessage }: MessageDetailProps) {
+export default function MessageDetail({ message, onDeleteMessage, onReplyMessage }: MessageDetailProps) {
   if (!message) {
     return (
       <div id="no-message-selected-pane" className="flex-1 bg-white flex flex-col items-center justify-center p-8 text-center">
@@ -37,6 +38,12 @@ export default function MessageDetail({ message, onDeleteMessage }: MessageDetai
     }
   };
 
+  const handleDelete = () => {
+    if (window.confirm('Voulez-vous vraiment supprimer ce message ?')) {
+      onDeleteMessage(message.id);
+    }
+  };
+
   return (
     <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden">
       {/* Top action bar */}
@@ -58,14 +65,28 @@ export default function MessageDetail({ message, onDeleteMessage }: MessageDetai
           </span>
         </div>
 
-        <button
-          id="btn-delete-detail"
-          onClick={() => onDeleteMessage(message.id)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          <span>Supprimer</span>
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {onReplyMessage && (
+            <button
+              id="btn-reply-detail"
+              onClick={() => onReplyMessage(message)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            >
+              <Reply className="w-3.5 h-3.5" />
+              <span>Répondre</span>
+            </button>
+          )}
+
+          <button
+            id="btn-delete-detail"
+            onClick={handleDelete}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Supprimer</span>
+          </button>
+        </div>
       </div>
 
       {/* Message content view */}
@@ -78,7 +99,21 @@ export default function MessageDetail({ message, onDeleteMessage }: MessageDetai
         </div>
 
         {/* Envelope Metadata */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50/50 border border-gray-200 p-5 rounded-xl mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50/50 border border-gray-200 p-5 rounded-xl mb-8">
+          {/* Expéditeur */}
+          <div className="space-y-1.5 text-left">
+            <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
+              Expéditeur (De)
+            </span>
+            <div className="flex items-center gap-2 text-sm text-gray-800 font-medium">
+              <div className="w-6 h-6 bg-white border border-gray-200 text-gray-500 rounded-md flex items-center justify-center shrink-0">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <span className="truncate">{message.expediteur || 'Inconnu'}</span>
+            </div>
+          </div>
+
+          {/* Destinataire */}
           <div className="space-y-1.5 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Destinataire (À)
@@ -91,6 +126,7 @@ export default function MessageDetail({ message, onDeleteMessage }: MessageDetai
             </div>
           </div>
 
+          {/* Date */}
           <div className="space-y-1.5 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Date d'envoi

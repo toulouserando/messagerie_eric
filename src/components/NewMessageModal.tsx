@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { X, Send, User, Tag, FileText, FolderSync, Info } from 'lucide-react';
+import { motion } from 'motion/react';
+import { X, Send, User, Tag } from 'lucide-react';
 import { Message } from '../types';
 
 interface NewMessageModalProps {
@@ -10,29 +10,25 @@ interface NewMessageModalProps {
 }
 
 export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewMessageModalProps) {
+  const MY_EMAIL = 'ericgalaxy5@free.fr';
+
   const [destinataire, setDestinataire] = useState('');
   const [objet, setObjet] = useState('');
   const [message, setMessage] = useState('');
   const [computedFolder, setComputedFolder] = useState('Divers');
 
-  // Helper to extract first word as folder
+  // Extrait le premier mot de l'objet pour en faire le nom du dossier
   const extractFolder = (subject: string): string => {
     const trimmed = subject.trim();
     if (!trimmed) return 'Divers';
     
-    // Get first token split by whitespace
     const firstWord = trimmed.split(/\s+/)[0];
-    
-    // Clean of common punctuation delimiters
     const cleaned = firstWord.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, "");
     
     if (!cleaned) return 'Divers';
-    
-    // Capitalize first letter beautifully
     return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   };
 
-  // Update dynamic folder preview on subject change
   useEffect(() => {
     setComputedFolder(extractFolder(objet));
   }, [objet]);
@@ -47,7 +43,7 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
       dossier: computedFolder,
     });
 
-    // Reset fields
+    // Reset des champs
     setDestinataire('');
     setObjet('');
     setMessage('');
@@ -73,6 +69,7 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
           </div>
           <button
             id="btn-close-modal"
+            type="button"
             onClick={onClose}
             className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
           >
@@ -84,9 +81,21 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Destinataire */}
           <div className="space-y-1">
-            <label htmlFor="input-destinataire" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
-              Destinataire
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="input-destinataire" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
+                Destinataire
+              </label>
+              
+              {/* Bouton raccourci pour s'envoyer à soi-même */}
+              <button
+                type="button"
+                onClick={() => setDestinataire(MY_EMAIL)}
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+              >
+                + M'écrire à moi-même
+              </button>
+            </div>
+
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                 <User className="w-4 h-4 stroke-[1.75]" />
@@ -95,11 +104,18 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
                 id="input-destinataire"
                 type="email"
                 required
+                list="contacts-list"
                 value={destinataire}
                 onChange={(e) => setDestinataire(e.target.value)}
                 placeholder="nom@exemple.com"
                 className="block w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
               />
+
+              {/* Suggestions automatiques */}
+              <datalist id="contacts-list">
+                <option value={MY_EMAIL} />
+                <option value="contact@exemple.com" />
+              </datalist>
             </div>
           </div>
 
