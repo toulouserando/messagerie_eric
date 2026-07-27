@@ -11,8 +11,10 @@ import MessageList from './components/MessageList';
 import MessageDetail from './components/MessageDetail';
 import NewMessageModal from './components/NewMessageModal';
 import SearchBar, { AdvancedFilters } from './components/SearchBar';
+import KeywordPagesView from './components/KeywordPagesView';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
+import { LayoutGrid, Mail } from 'lucide-react';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -21,6 +23,9 @@ export default function App() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // ÉTAT DE LA VUE : 'messagerie' (classique) ou 'pages' (mots-clés)
+  const [viewMode, setViewMode] = useState<'messagerie' | 'pages'>('messagerie');
 
   const [selectedFolderId, setSelectedFolderId] = useState<string>('tous');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
@@ -173,7 +178,7 @@ export default function App() {
     }
   };
 
-  // GESTION DU RECHERCHE ET DU FILTRAGE MULTI-CRITÈRES
+  // GESTION DE LA RECHERCHE ET DU FILTRAGE MULTI-CRITÈRES
   const handleSearchChange = (query: string, newFilters: AdvancedFilters) => {
     setSearchTerm(query);
     setFilters(newFilters);
@@ -260,34 +265,80 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center text-gray-500">
-          Chargement de la messagerie...
-        </div>
-      ) : (
-        <div className="flex flex-col border-r border-gray-200 w-80 lg:w-96 shrink-0 h-full">
-          {/* Barre de recherche intégrée au-dessus de la liste */}
-          <SearchBar onSearch={handleSearchChange} />
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* BARRE DE SELECTION DU MODE DE VUE */}
+        <div className="bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-1 bg-gray-200/80 p-1 rounded-lg">
+            <button
+              onClick={() => setViewMode('messagerie')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === 'messagerie'
+                  ? 'bg-white text-blue-600 shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>Messagerie</span>
+            </button>
+            <button
+              onClick={() => setViewMode('pages')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === 'pages'
+                  ? 'bg-white text-blue-600 shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Mode Pages (Mots-clés)</span>
+            </button>
+          </div>
 
-          <MessageList
-            messages={filteredMessages}
-            selectedFolderId={selectedFolderId}
-            selectedMessageId={selectedMessageId}
-            onSelectMessage={(msg) => setSelectedMessageId(msg.id)}
+          <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline">
+            {viewMode === 'messagerie' ? 'Vue chronologique' : 'Tri automatique par thématiques'}
+          </span>
+        </div>
+
+        {/* CONTENU PRINCIPAL */}
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center text-gray-500 text-xs font-medium">
+            Chargement de la messagerie...
+          </div>
+        ) : viewMode === 'pages' ? (
+          /* MODE PAGES PAR MOTS-CLÉS */
+          <KeywordPagesView
+            messages={messages}
             onDeleteMessage={handleDeleteMessage}
+            onReplyMessage={handleReplyMessage}
+            onForwardMessage={handleForwardMessage}
             onToggleHideMessage={handleToggleHideMessage}
           />
-        </div>
-      )}
+        ) : (
+          /* MODE MESSAGERE TRADITIONNEL */
+          <div className="flex-1 flex h-full overflow-hidden">
+            <div className="flex flex-col border-r border-gray-200 w-80 lg:w-96 shrink-0 h-full">
+              <SearchBar onSearch={handleSearchChange} />
+              <MessageList
+                messages={filteredMessages}
+                selectedFolderId={selectedFolderId}
+                selectedMessageId={selectedMessageId}
+                onSelectMessage={(msg) => setSelectedMessageId(msg.id)}
+                onDeleteMessage={handleDeleteMessage}
+                onToggleHideMessage={handleToggleHideMessage}
+              />
+            </div>
 
-      <MessageDetail
-        message={selectedMessage}
-        onDeleteMessage={handleDeleteMessage}
-        onReplyMessage={handleReplyMessage}
-        onForwardMessage={handleForwardMessage}
-        onToggleHideMessage={handleToggleHideMessage}
-      />
+            <MessageDetail
+              message={selectedMessage}
+              onDeleteMessage={handleDeleteMessage}
+              onReplyMessage={handleReplyMessage}
+              onForwardMessage={handleForwardMessage}
+              onToggleHideMessage={handleToggleHideMessage}
+            />
+          </div>
+        )}
+      </div>
 
+      {/* MODAL NOUVEAU MESSAGE */}
       <AnimatePresence>
         {isComposeOpen && (
           <NewMessageModal
