@@ -1,32 +1,42 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Lock, AlertCircle, KeyRound, Loader2 } from 'lucide-react';
+import { Lock, AlertCircle, KeyRound, User, Loader2 } from 'lucide-react';
+import { supabase } from '../supabaseClient'; // Vérifiez le chemin d'accès vers votre supabaseClient
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
 }
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsSubmitting(true);
 
-    // Simulate small delay for beautiful UX feel
-    setTimeout(() => {
-      const correctPassword = (import.meta as any).env.VITE_PASSWORD || 'sherpa';
-      
-      if (password === correctPassword) {
-        onLoginSuccess();
-      } else {
-        setError('Mot de passe incorrect. Veuillez réessayer.');
+    // Si l'utilisateur saisit "eric", on le formate en "eric@projet.local" pour Supabase
+    const formattedEmail = username.includes('@') ? username : `${username}@projet.local`;
+
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: formattedEmail,
+        password: password,
+      });
+
+      if (authError) {
+        setError('Identifiant ou mot de passe incorrect.');
         setIsSubmitting(false);
+      } else if (data.user) {
+        onLoginSuccess();
       }
-    }, 600);
+    } catch (err) {
+      setError('Erreur de connexion au serveur.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -51,11 +61,36 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               Accès Messagerie
             </h1>
             <p className="text-xs text-gray-500 mt-2">
-              Veuillez saisir votre mot de passe pour accéder à vos dossiers sécurisés.
+              Veuillez vous identifier pour accéder à vos dossiers sécurisés Supabase.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Champ Identifiant */}
+            <div className="space-y-1">
+              <label htmlFor="username-input" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
+                Identifiant
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                  <User className="w-4 h-4 stroke-[1.75]" />
+                </div>
+                <input
+                  id="username-input"
+                  type="text"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (error) setError('');
+                  }}
+                  placeholder="Nom d'utilisateur"
+                  required
+                  className="block w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
+                />
+              </div>
+            </div>
+
+            {/* Champ Mot de passe */}
             <div className="space-y-1">
               <label htmlFor="password-input" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
                 Mot de passe
@@ -72,7 +107,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                     setPassword(e.target.value);
                     if (error) setError('');
                   }}
-                  placeholder="Saisissez le mot de passe de validation"
+                  placeholder="Saisissez votre mot de passe"
                   required
                   className="block w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
                 />
@@ -95,7 +130,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               id="login-submit-btn"
               type="submit"
               disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-lg hover:shadow-lg transition-all cursor-pointer disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-lg hover:shadow-lg transition-all cursor-pointer disabled:cursor-not-allowed mt-2"
             >
               {isSubmitting ? (
                 <>
@@ -110,7 +145,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
           <div className="mt-8 pt-6 border-t border-gray-100 text-center">
             <p className="text-[10px] text-gray-400 font-mono tracking-wider uppercase">
-              Système Sécurisé • Sherpa
+              Système Sécurisé • Supabase Auth
             </p>
           </div>
         </div>
