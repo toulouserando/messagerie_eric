@@ -14,7 +14,7 @@ import SearchBar, { AdvancedFilters } from './components/SearchBar';
 import KeywordPagesView from './components/KeywordPagesView';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
-import { LayoutGrid, Mail } from 'lucide-react';
+import { FileText, Mail } from 'lucide-react';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -24,9 +24,10 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // ÉTAT DE LA VUE : 'messagerie' (classique) ou 'pages' (mots-clés)
+  // ÉTAT DE LA VUE : 'messagerie' (classique) ou 'pages' (mode document)
   const [viewMode, setViewMode] = useState<'messagerie' | 'pages'>('messagerie');
 
+  // DOSSIER ACTIF : Reste par défaut sur 'tous'
   const [selectedFolderId, setSelectedFolderId] = useState<string>('tous');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -160,7 +161,9 @@ export default function App() {
 
       setMessages((prev) => [newMsg, ...prev]);
       setSelectedMessageId(newMsg.id);
-      setSelectedFolderId(newMsg.dossier.toLowerCase());
+
+      // RESTRICTI0N : On ne va PAS dans le dossier spécifique du mot-clé, on Reste sur "Tous les messages"
+      setSelectedFolderId('tous');
     }
   };
 
@@ -266,7 +269,7 @@ export default function App() {
       />
 
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* BARRE DE SELECTION DU MODE DE VUE */}
+        {/* BARRE DE SÉLECTION DU MODE DE VUE */}
         <div className="bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-1 bg-gray-200/80 p-1 rounded-lg">
             <button
@@ -278,7 +281,7 @@ export default function App() {
               }`}
             >
               <Mail className="w-3.5 h-3.5" />
-              <span>Messagerie</span>
+              <span>Messagerie Classique</span>
             </button>
             <button
               onClick={() => setViewMode('pages')}
@@ -288,13 +291,13 @@ export default function App() {
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Mode Pages (Mots-clés)</span>
+              <FileText className="w-3.5 h-3.5" />
+              <span>Format Page / Document</span>
             </button>
           </div>
 
           <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline">
-            {viewMode === 'messagerie' ? 'Vue chronologique' : 'Tri automatique par thématiques'}
+            Dossier : Tous les messages
           </span>
         </div>
 
@@ -304,9 +307,10 @@ export default function App() {
             Chargement de la messagerie...
           </div>
         ) : viewMode === 'pages' ? (
-          /* MODE PAGES PAR MOTS-CLÉS */
+          /* MODE PAGES (FORMAT DOCUMENT RÉDIGÉ) */
           <KeywordPagesView
             messages={messages}
+            activeKeyword={selectedFolderId === 'tous' ? 'Home' : selectedFolderId}
             onDeleteMessage={handleDeleteMessage}
             onReplyMessage={handleReplyMessage}
             onForwardMessage={handleForwardMessage}
