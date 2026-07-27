@@ -10,7 +10,7 @@ import Sidebar from './components/Sidebar';
 import MessageList from './components/MessageList';
 import MessageDetail from './components/MessageDetail';
 import NewMessageModal from './components/NewMessageModal';
-import { AnimatePresence } from 'framer-motion'; // ou 'motion/react'
+import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 
 export default function App() {
@@ -25,7 +25,12 @@ export default function App() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
 
-  // 1. Charger les messages depuis Supabase au démarrage
+  const [initialComposeData, setInitialComposeData] = useState<{
+    destinataire?: string;
+    objet?: string;
+    message?: string;
+  }>({});
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchMessages();
@@ -42,7 +47,6 @@ export default function App() {
     if (error) {
       console.error('Erreur Supabase :', error.message);
     } else if (data) {
-      // Mapping entre les colonnes Supabase et votre interface Message
       const formattedMessages: Message[] = data.map((item) => ({
         id: item.id,
         expediteur: item.sender_email,
@@ -51,24 +55,24 @@ export default function App() {
         message: item.body,
         dossier: item.theme || 'Général',
         date: item.created_at,
+        masque: item.is_archived || false,
       }));
 
       setMessages(formattedMessages);
 
-      if (formattedMessages.length > 0 && !selectedMessageId) {
-        setSelectedMessageId(formattedMessages[0].id);
+      const visible = formattedMessages.filter((m) => !m.masque);
+      if (visible.length > 0 && !selectedMessageId) {
+        setSelectedMessageId(visible[0].id);
       }
     }
     setLoading(false);
   };
 
-  // Handle Login
   const handleLoginSuccess = () => {
     localStorage.setItem('sherpa_authenticated', 'true');
     setIsAuthenticated(true);
   };
 
-  // Handle Logout
   const handleLogout = () => {
     localStorage.removeItem('sherpa_authenticated');
     setIsAuthenticated(false);
@@ -76,20 +80,49 @@ export default function App() {
     setSelectedFolderId('tous');
   };
 
-  // 2. Ajouter un nouveau message dans Supabase
+  const handleOpenNewMessage = () => {
+    setInitialComposeData({});
+    setIsComposeOpen(true);
+  };
+
+  const handleReplyMessage = (msg: Message) => {
+    setInitialComposeData({
+      destinataire: msg.expediteur || msg.destinataire,
+      objet: msg.objet.startsWith('Re:') ? msg.objet : `Re: ${msg.objet}`,
+      message: `\n\n--- Message original de ${msg.expediteur || 'inconnu'} ---\n${msg.message}`,
+    });
+    setIsComposeOpen(true);
+  };
+
+  const handleForwardMessage = (msg: Message) => {
+    setInitialComposeData({
+      destinataire: '',
+      objet: msg.objet.startsWith('Fwd:') || msg.objet.startsWith('Tr:') ? msg.objet : `Fwd: ${msg.objet}`,
+      message: `\n\n-------- Message transféré --------\nDe : ${msg.expediteur}\nÀ : ${msg.destinataire}\nObjet : ${msg.objet}\n\n${msg.message}`,
+    });
+    setIsComposeOpen(true);
+  };
+
+  const handleToggleHideMessage = async (id: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+
+    // Tentative de mise à jour dans Supabase (colonne is_archived)
+    await supabase.from('messages').update({ is_archived: newStatus }).eq('id', id);
+
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, masque: newStatus } : m))
+    );
+  };
+
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
     const payload = {
-      sender_email: 'moi@sherpa.com', // Adresse de l'expéditeur
+      sender_email: 'ericgalaxy5@free.fr',
       recipient_email: newMsgData.destinataire,
       subject: newMsgData.objet,
       body: newMsgData.message,
-      // Le thème sera auto-détecté par le trigger SQL si laissé vide ou transmis ici
     };
 
-    const { data, error } = await supabase
-      .from('messages')
-      .insert([payload])
-      .select();
+    const { data, error } = await supabase.from('messages').insert([payload]).select();
 
     if (error) {
       console.error("Erreur lors de l'envoi :", error.message);
@@ -106,6 +139,7 @@ export default function App() {
         message: inserted.body,
         dossier: inserted.theme || 'Général',
         date: inserted.created_at,
+        masque: false,
       };
 
       setMessages((prev) => [newMsg, ...prev]);
@@ -114,7 +148,6 @@ export default function App() {
     }
   };
 
-  // 3. Supprimer un message dans Supabase
   const handleDeleteMessage = async (id: string) => {
     const { error } = await supabase.from('messages').delete().eq('id', id);
 
@@ -137,27 +170,23 @@ export default function App() {
 
   return (
     <div id="app-workspace" className="flex h-screen w-full bg-white overflow-hidden text-gray-800 font-sans selection:bg-gray-100">
-      {/* 1. Left Sidebar */}
       <Sidebar
         messages={messages}
         selectedFolderId={selectedFolderId}
         onSelectFolder={(folderId) => {
           setSelectedFolderId(folderId);
           const filtered = messages.filter((msg) => {
+            if (folderId === 'masques') return msg.masque === true;
+            if (msg.masque) return false;
             if (folderId === 'tous') return true;
             return msg.dossier.toLowerCase() === folderId;
           });
-          if (filtered.length > 0) {
-            setSelectedMessageId(filtered[0].id);
-          } else {
-            setSelectedMessageId(null);
-          }
+          setSelectedMessageId(filtered.length > 0 ? filtered[0].id : null);
         }}
-        onNewMessageClick={() => setIsComposeOpen(true)}
+        onNewMessageClick={handleOpenNewMessage}
         onLogout={handleLogout}
       />
 
-      {/* 2. Middle Message Feed */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-gray-500">
           Chargement de la messagerie...
@@ -169,22 +198,25 @@ export default function App() {
           selectedMessageId={selectedMessageId}
           onSelectMessage={(msg) => setSelectedMessageId(msg.id)}
           onDeleteMessage={handleDeleteMessage}
+          onToggleHideMessage={handleToggleHideMessage}
         />
       )}
 
-      {/* 3. Right Message Detail Viewer */}
       <MessageDetail
         message={selectedMessage}
         onDeleteMessage={handleDeleteMessage}
+        onReplyMessage={handleReplyMessage}
+        onForwardMessage={handleForwardMessage}
+        onToggleHideMessage={handleToggleHideMessage}
       />
 
-      {/* Compose Modal */}
       <AnimatePresence>
         {isComposeOpen && (
           <NewMessageModal
             isOpen={isComposeOpen}
             onClose={() => setIsComposeOpen(false)}
             onSendMessage={handleSendMessage}
+            initialData={initialComposeData}
           />
         )}
       </AnimatePresence>

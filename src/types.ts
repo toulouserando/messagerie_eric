@@ -6,10 +6,11 @@ export interface Message {
   dossier: string;
   date: string;
   expediteur: string;
+  masque?: boolean; // NOUVEAU
 }
 
 export interface Folder {
-  id: string; // 'tous' or the folder name in lowercase
-  name: string; // Display name
+  id: string;
+  name: string;
   count: number;
 }

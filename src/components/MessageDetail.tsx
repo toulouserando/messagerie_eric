@@ -1,13 +1,24 @@
+import { useState } from 'react';
 import { Message } from '../types';
-import { Mail, Calendar, User, Folder, Trash2, ShieldCheck, Reply } from 'lucide-react';
+import { Mail, Calendar, User, Folder, Trash2, ShieldCheck, Reply, Forward, Eye, EyeOff, Copy, Check } from 'lucide-react';
 
 interface MessageDetailProps {
   message: Message | null;
   onDeleteMessage: (id: string) => void;
   onReplyMessage?: (message: Message) => void;
+  onForwardMessage?: (message: Message) => void;
+  onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
 }
 
-export default function MessageDetail({ message, onDeleteMessage, onReplyMessage }: MessageDetailProps) {
+export default function MessageDetail({
+  message,
+  onDeleteMessage,
+  onReplyMessage,
+  onForwardMessage,
+  onToggleHideMessage,
+}: MessageDetailProps) {
+  const [copied, setCopied] = useState(false);
+
   if (!message) {
     return (
       <div id="no-message-selected-pane" className="flex-1 bg-white flex flex-col items-center justify-center p-8 text-center">
@@ -39,14 +50,20 @@ export default function MessageDetail({ message, onDeleteMessage, onReplyMessage
   };
 
   const handleDelete = () => {
-    if (window.confirm('Voulez-vous vraiment supprimer ce message ?')) {
+    if (window.confirm('Voulez-vous vraiment supprimer définitivement ce message ?')) {
       onDeleteMessage(message.id);
     }
   };
 
+  const handleCopyText = () => {
+    navigator.clipboard.writeText(message.message);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden">
-      {/* Top action bar */}
+      {/* Barre d'action supérieure */}
       <div className="px-8 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/40">
         <div className="flex items-center gap-2">
           <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-mono font-bold uppercase tracking-wider border ${
@@ -65,7 +82,7 @@ export default function MessageDetail({ message, onDeleteMessage, onReplyMessage
           </span>
         </div>
 
-        {/* Action Buttons */}
+        {/* Boutons d'actions */}
         <div className="flex items-center gap-2">
           {onReplyMessage && (
             <button
@@ -75,6 +92,37 @@ export default function MessageDetail({ message, onDeleteMessage, onReplyMessage
             >
               <Reply className="w-3.5 h-3.5" />
               <span>Répondre</span>
+            </button>
+          )}
+
+          {onForwardMessage && (
+            <button
+              id="btn-forward-detail"
+              onClick={() => onForwardMessage(message)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            >
+              <Forward className="w-3.5 h-3.5" />
+              <span>Transférer</span>
+            </button>
+          )}
+
+          {onToggleHideMessage && (
+            <button
+              id="btn-hide-detail"
+              onClick={() => onToggleHideMessage(message.id, !!message.masque)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            >
+              {message.masque ? (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Réafficher</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-3.5 h-3.5 text-gray-500" />
+                  <span>Masquer</span>
+                </>
+              )}
             </button>
           )}
 
@@ -89,18 +137,16 @@ export default function MessageDetail({ message, onDeleteMessage, onReplyMessage
         </div>
       </div>
 
-      {/* Message content view */}
+      {/* Détails du contenu */}
       <div className="flex-1 overflow-y-auto p-8 lg:p-10">
-        {/* Subject Header */}
         <div className="mb-8 border-b border-gray-100 pb-6">
           <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-950 leading-tight">
             {message.objet || '(Sans objet)'}
           </h1>
         </div>
 
-        {/* Envelope Metadata */}
+        {/* Métadonnées */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50/50 border border-gray-200 p-5 rounded-xl mb-8">
-          {/* Expéditeur */}
           <div className="space-y-1.5 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Expéditeur (De)
@@ -113,7 +159,6 @@ export default function MessageDetail({ message, onDeleteMessage, onReplyMessage
             </div>
           </div>
 
-          {/* Destinataire */}
           <div className="space-y-1.5 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Destinataire (À)
@@ -126,7 +171,6 @@ export default function MessageDetail({ message, onDeleteMessage, onReplyMessage
             </div>
           </div>
 
-          {/* Date */}
           <div className="space-y-1.5 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Date d'envoi
@@ -140,11 +184,20 @@ export default function MessageDetail({ message, onDeleteMessage, onReplyMessage
           </div>
         </div>
 
-        {/* Message body */}
+        {/* Corps du message */}
         <div className="text-left">
-          <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono mb-4">
-            Corps du message
-          </span>
+          <div className="flex items-center justify-between mb-4">
+            <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
+              Corps du message
+            </span>
+            <button
+              onClick={handleCopyText}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 font-medium cursor-pointer"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Copié !' : 'Copier le texte'}</span>
+            </button>
+          </div>
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs">
             <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-sans">
               {message.message}

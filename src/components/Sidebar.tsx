@@ -1,5 +1,5 @@
 import { Folder, Message } from '../types';
-import { Mail, Plus, Folder as FolderIcon, Inbox, LogOut, Layers } from 'lucide-react';
+import { Plus, Folder as FolderIcon, Inbox, LogOut, EyeOff } from 'lucide-react';
 
 interface SidebarProps {
   messages: Message[];
@@ -16,21 +16,18 @@ export default function Sidebar({
   onNewMessageClick,
   onLogout,
 }: SidebarProps) {
-  
-  // Calculate folder counts dynamically
+  const visibleMessages = messages.filter((m) => !m.masque);
+  const hiddenMessages = messages.filter((m) => m.masque);
+
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
-    
-    // Always include 'Divers' in the map so it is present
     foldersMap.set('Divers', 0);
-    
-    // Count messages per folder
-    messages.forEach((msg) => {
+
+    visibleMessages.forEach((msg) => {
       const folderName = msg.dossier || 'Divers';
       foldersMap.set(folderName, (foldersMap.get(folderName) || 0) + 1);
     });
 
-    // Convert map to Folder structures
     const folderList: Folder[] = [];
     foldersMap.forEach((count, name) => {
       folderList.push({
@@ -40,21 +37,24 @@ export default function Sidebar({
       });
     });
 
-    // Sort alphabetically, except 'Divers' which should ideally be near the end or just alphabetically
     folderList.sort((a, b) => {
       if (a.name === 'Divers') return 1;
       if (b.name === 'Divers') return -1;
       return a.name.localeCompare(b.name);
     });
 
-    // Prepend "Tous" which aggregates everything
     return [
       {
         id: 'tous',
         name: 'Tous les messages',
-        count: messages.length,
+        count: visibleMessages.length,
       },
       ...folderList,
+      {
+        id: 'masques',
+        name: 'Messages masqués',
+        count: hiddenMessages.length,
+      },
     ];
   };
 
@@ -62,7 +62,6 @@ export default function Sidebar({
 
   return (
     <aside id="sidebar-container" className="w-80 border-r border-gray-200 bg-white flex flex-col h-full shrink-0">
-      {/* Brand Header */}
       <div className="p-6 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-xs">
@@ -75,7 +74,6 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Primary Call-to-Action */}
       <div className="p-5">
         <button
           id="btn-compose-message"
@@ -87,16 +85,16 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* Folders List */}
       <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
         <div className="px-3 mb-2">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest font-mono">Dossiers</span>
         </div>
-        
+
         {folders.map((folder) => {
           const isSelected = selectedFolderId === folder.id;
           const isAll = folder.id === 'tous';
-          
+          const isHiddenFolder = folder.id === 'masques';
+
           return (
             <button
               id={`folder-btn-${folder.id}`}
@@ -111,6 +109,8 @@ export default function Sidebar({
               <div className="flex items-center gap-3">
                 {isAll ? (
                   <Inbox className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                ) : isHiddenFolder ? (
+                  <EyeOff className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
                 ) : (
                   <FolderIcon className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
                 )}
@@ -130,7 +130,6 @@ export default function Sidebar({
         })}
       </div>
 
-      {/* Sidebar Footer with Logout */}
       <div className="p-4 border-t border-gray-100">
         <button
           id="btn-logout"

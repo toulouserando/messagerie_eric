@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Message } from '../types';
-import { Search, Mail, Calendar, Trash2, ArrowRight } from 'lucide-react';
+import { Search, Mail, Trash2, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface MessageListProps {
@@ -9,6 +9,7 @@ interface MessageListProps {
   selectedMessageId: string | null;
   onSelectMessage: (message: Message) => void;
   onDeleteMessage: (id: string) => void;
+  onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
 }
 
 export default function MessageList({
@@ -17,16 +18,19 @@ export default function MessageList({
   selectedMessageId,
   onSelectMessage,
   onDeleteMessage,
+  onToggleHideMessage,
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. Filter by folder
+  // 1. Filtrer selon le dossier sélectionné et l'état masqué
   const folderFiltered = messages.filter((msg) => {
+    if (selectedFolderId === 'masques') return msg.masque === true;
+    if (msg.masque) return false;
     if (selectedFolderId === 'tous') return true;
     return msg.dossier.toLowerCase() === selectedFolderId;
   });
 
-  // 2. Filter by search query
+  // 2. Recherche par mot-clé
   const finalFiltered = folderFiltered.filter((msg) => {
     const query = searchQuery.toLowerCase();
     return (
@@ -36,7 +40,6 @@ export default function MessageList({
     );
   });
 
-  // Date Formatter Helper
   const formatDate = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
@@ -53,7 +56,6 @@ export default function MessageList({
 
   return (
     <div id="message-list-container" className="w-96 border-r border-gray-200 bg-gray-50/30 flex flex-col h-full shrink-0">
-      {/* Search Header */}
       <div className="p-4 bg-white border-b border-gray-200 space-y-3">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 stroke-[1.75]" />
@@ -68,7 +70,6 @@ export default function MessageList({
         </div>
       </div>
 
-      {/* Message Feed */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {finalFiltered.length === 0 ? (
           <div className="text-center py-12 px-4">
@@ -84,7 +85,7 @@ export default function MessageList({
           <AnimatePresence initial={false}>
             {finalFiltered.map((msg) => {
               const isSelected = selectedMessageId === msg.id;
-              
+
               return (
                 <motion.div
                   id={`message-card-${msg.id}`}
@@ -101,7 +102,6 @@ export default function MessageList({
                       : 'bg-white hover:bg-gray-50 border-gray-200 shadow-xs'
                   }`}
                 >
-                  {/* Top line: Destinataire & Time */}
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <span className="text-xs font-semibold text-gray-800 truncate">
                       À : {msg.destinataire}
@@ -111,19 +111,15 @@ export default function MessageList({
                     </span>
                   </div>
 
-                  {/* Subject line */}
                   <h4 className={`text-sm font-bold text-gray-800 line-clamp-1 mb-2 ${isSelected ? 'text-blue-900' : ''}`}>
                     {msg.objet || '(Sans objet)'}
                   </h4>
 
-                  {/* Body preview */}
                   <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-3">
                     {msg.message}
                   </p>
 
-                  {/* Badge & Action Bar */}
                   <div className="flex items-center justify-between">
-                    {/* Folder Badge */}
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold tracking-wide uppercase ${
                       msg.dossier === 'Sherpa'
                         ? 'bg-blue-50 text-blue-700 border border-blue-100/50'
@@ -134,18 +130,32 @@ export default function MessageList({
                       {msg.dossier}
                     </span>
 
-                    {/* Delete button (only visible on hover or if selected) */}
-                    <button
-                      id={`btn-delete-${msg.id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteMessage(msg.id);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
-                      title="Supprimer le message"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      {onToggleHideMessage && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleHideMessage(msg.id, !!msg.masque);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title={msg.masque ? 'Réafficher le message' : 'Masquer le message'}
+                        >
+                          {msg.masque ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+
+                      <button
+                        id={`btn-delete-${msg.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteMessage(msg.id);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Supprimer le message"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               );
