@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Message } from './types';
 import LoginScreen from './components/LoginScreen';
 import Sidebar from './components/Sidebar';
 import MessageList from './components/MessageList';
 import MessageDetail from './components/MessageDetail';
 import NewMessageModal from './components/NewMessageModal';
+import SearchBar, { AdvancedFilters } from './components/SearchBar';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 
@@ -24,6 +25,17 @@ export default function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>('tous');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+
+  // ÉTATS DE RECHERCHE & FILTRES
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState<AdvancedFilters>({
+    objet: '',
+    message: '',
+    destinataire: '',
+    expediteur: '',
+    dateDebut: '',
+    dateFin: '',
+  });
 
   const [initialComposeData, setInitialComposeData] = useState<{
     destinataire?: string;
@@ -106,7 +118,6 @@ export default function App() {
   const handleToggleHideMessage = async (id: string, currentStatus: boolean) => {
     const newStatus = !currentStatus;
 
-    // Tentative de mise à jour dans Supabase (colonne is_archived)
     await supabase.from('messages').update({ is_archived: newStatus }).eq('id', id);
 
     setMessages((prev) =>
@@ -162,6 +173,68 @@ export default function App() {
     }
   };
 
+  // GESTION DU RECHERCHE ET DU FILTRAGE MULTI-CRITÈRES
+  const handleSearchChange = (query: string, newFilters: AdvancedFilters) => {
+    setSearchTerm(query);
+    setFilters(newFilters);
+  };
+
+  const filteredMessages = useMemo(() => {
+    return messages.filter((msg) => {
+      // 1. Recherche par dossier actif
+      if (selectedFolderId === 'masques') {
+        if (!msg.masque) return false;
+      } else {
+        if (msg.masque) return false; // Masque les éléments archivés dans les dossiers normaux
+        if (selectedFolderId !== 'tous' && msg.dossier.toLowerCase() !== selectedFolderId) {
+          return false;
+        }
+      }
+
+      // 2. Recherche globale (si du texte est entré dans la barre principale)
+      if (searchTerm.trim()) {
+        const query = searchTerm.toLowerCase();
+        const matchGlobal =
+          msg.objet?.toLowerCase().includes(query) ||
+          msg.message?.toLowerCase().includes(query) ||
+          msg.expediteur?.toLowerCase().includes(query) ||
+          msg.destinataire?.toLowerCase().includes(query) ||
+          msg.dossier?.toLowerCase().includes(query);
+
+        if (!matchGlobal) return false;
+      }
+
+      // 3. Recherche Avancée (Filtres ciblés)
+      if (filters.objet && !msg.objet?.toLowerCase().includes(filters.objet.toLowerCase())) {
+        return false;
+      }
+
+      if (filters.message && !msg.message?.toLowerCase().includes(filters.message.toLowerCase())) {
+        return false;
+      }
+
+      if (filters.expediteur && !msg.expediteur?.toLowerCase().includes(filters.expediteur.toLowerCase())) {
+        return false;
+      }
+
+      if (filters.destinataire && !msg.destinataire?.toLowerCase().includes(filters.destinataire.toLowerCase())) {
+        return false;
+      }
+
+      if (filters.dateDebut && new Date(msg.date) < new Date(filters.dateDebut)) {
+        return false;
+      }
+
+      if (filters.dateFin) {
+        const endDate = new Date(filters.dateFin);
+        endDate.setHours(23, 59, 59, 999);
+        if (new Date(msg.date) > endDate) return false;
+      }
+
+      return true;
+    });
+  }, [messages, selectedFolderId, searchTerm, filters]);
+
   const selectedMessage = messages.find((m) => m.id === selectedMessageId) || null;
 
   if (!isAuthenticated) {
@@ -192,14 +265,19 @@ export default function App() {
           Chargement de la messagerie...
         </div>
       ) : (
-        <MessageList
-          messages={messages}
-          selectedFolderId={selectedFolderId}
-          selectedMessageId={selectedMessageId}
-          onSelectMessage={(msg) => setSelectedMessageId(msg.id)}
-          onDeleteMessage={handleDeleteMessage}
-          onToggleHideMessage={handleToggleHideMessage}
-        />
+        <div className="flex flex-col border-r border-gray-200 w-80 lg:w-96 shrink-0 h-full">
+          {/* Barre de recherche intégrée au-dessus de la liste */}
+          <SearchBar onSearch={handleSearchChange} />
+
+          <MessageList
+            messages={filteredMessages}
+            selectedFolderId={selectedFolderId}
+            selectedMessageId={selectedMessageId}
+            onSelectMessage={(msg) => setSelectedMessageId(msg.id)}
+            onDeleteMessage={handleDeleteMessage}
+            onToggleHideMessage={handleToggleHideMessage}
+          />
+        </div>
       )}
 
       <MessageDetail

@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Message } from '../types';
-import { Mail, Calendar, User, Folder, Trash2, ShieldCheck, Reply, Forward, Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { 
+  Mail, Calendar, User, Folder, Trash2, ShieldCheck, 
+  Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle 
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface MessageDetailProps {
   message: Message | null;
@@ -18,6 +22,12 @@ export default function MessageDetail({
   onToggleHideMessage,
 }: MessageDetailProps) {
   const [copied, setCopied] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Ferme la fenêtre de confirmation de suppression si l'utilisateur change de message
+  useEffect(() => {
+    setShowDeleteConfirm(false);
+  }, [message?.id]);
 
   if (!message) {
     return (
@@ -49,10 +59,9 @@ export default function MessageDetail({
     }
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Voulez-vous vraiment supprimer définitivement ce message ?')) {
-      onDeleteMessage(message.id);
-    }
+  const handleConfirmDelete = () => {
+    onDeleteMessage(message.id);
+    setShowDeleteConfirm(false);
   };
 
   const handleCopyText = () => {
@@ -62,7 +71,7 @@ export default function MessageDetail({
   };
 
   return (
-    <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden">
+    <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden relative">
       {/* Barre d'action supérieure */}
       <div className="px-8 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/40">
         <div className="flex items-center gap-2">
@@ -128,7 +137,7 @@ export default function MessageDetail({
 
           <button
             id="btn-delete-detail"
-            onClick={handleDelete}
+            onClick={() => setShowDeleteConfirm(true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -205,6 +214,46 @@ export default function MessageDetail({
           </div>
         </div>
       </div>
+
+      {/* POP-UP DE CONFIRMATION DE SUPPRESSION */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 text-center"
+            >
+              <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100">
+                <AlertTriangle className="w-6 h-6 stroke-[2]" />
+              </div>
+
+              <h3 className="text-base font-bold text-gray-900 mb-1">
+                Supprimer ce message ?
+              </h3>
+              <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+                Cette action supprimera définitivement ce message. L'opération est irréversible.
+              </p>
+
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
