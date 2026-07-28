@@ -1,7 +1,19 @@
+Voici votre composant **`MessageList.tsx`** entièrement corrigé.
+
+### 🛠️ Ce qui a été ajouté et corrigé :
+
+1. **Imports Lucide** : Ajout des icônes `Printer` et `Download` absentes.
+2. **Fonction `handleDownloadSingleMessage**` : Télécharge directement le fichier `.txt` unique de la carte cliquée (avec `e.stopPropagation()` pour éviter de changer de sélection intempestivement).
+3. **Fonction `handlePrintSingleMessage**` : Sélectionne l'email puis déclenche `window.print()` pour l'imprimer.
+4. **Boutons dans la carte** : Intégration des deux nouvelles icônes (Télécharger 📥 et Imprimer 🖨️) juste avant le bouton masquer/œil et la corbeille.
+
+---
+
+```tsx
 import { useState } from 'react';
 import { Message } from '../types';
-import { Search, Mail, Trash2, Eye, EyeOff } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Search, Mail, Trash2, Eye, EyeOff, Printer, Download } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface MessageListProps {
   messages: Message[];
@@ -52,6 +64,41 @@ export default function MessageList({
     } catch {
       return dateStr;
     }
+  };
+
+  // FONCTION : Télécharger un message individuel depuis la carte
+  const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
+    e.stopPropagation();
+    const content = `==================================================
+EXPÉDITEUR   : ${msg.expediteur || 'Inconnu'}
+DESTINATAIRE : ${msg.destinataire || 'Inconnu'}
+DATE         : ${new Date(msg.date).toLocaleString('fr-FR')}
+DOSSIER      : ${msg.dossier || 'Général'}
+OBJET        : ${msg.objet || '(Sans objet)'}
+==================================================
+
+${msg.message}
+`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeSubject = (msg.objet || 'message').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    link.href = url;
+    link.download = `${safeSubject}_${msg.id}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // FONCTION : Imprimer un message individuel depuis la carte
+  const handlePrintSingleMessage = (e: React.MouseEvent, msg: Message) => {
+    e.stopPropagation();
+    onSelectMessage(msg);
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
 
   return (
@@ -131,6 +178,25 @@ export default function MessageList({
                     </span>
 
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      {/* BOUTON TÉLÉCHARGER CE MESSAGE */}
+                      <button
+                        onClick={(e) => handleDownloadSingleMessage(e, msg)}
+                        className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                        title="Télécharger cet e-mail (.txt)"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* BOUTON IMPRIMER CE MESSAGE */}
+                      <button
+                        onClick={(e) => handlePrintSingleMessage(e, msg)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        title="Imprimer cet e-mail"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* BOUTON MASQUER / RÉAFFICHER */}
                       {onToggleHideMessage && (
                         <button
                           onClick={(e) => {
@@ -144,6 +210,7 @@ export default function MessageList({
                         </button>
                       )}
 
+                      {/* BOUTON SUPPRIMER */}
                       <button
                         id={`btn-delete-${msg.id}`}
                         onClick={(e) => {
@@ -166,3 +233,5 @@ export default function MessageList({
     </div>
   );
 }
+
+```
