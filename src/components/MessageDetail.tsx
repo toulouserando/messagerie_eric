@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Message } from '../types';
 import { 
   Mail, Calendar, User, Folder, Trash2, ShieldCheck, 
-  Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle, RotateCcw 
+  Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle, RotateCcw, Download 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -72,6 +72,33 @@ export default function MessageDetail({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Téléchargement local de l'e-mail sur le disque dur
+  const handleDownloadMessage = () => {
+    const content = `==================================================
+EXPÉDITEUR   : ${message.expediteur || 'Inconnu'}
+DESTINATAIRE : ${message.destinataire || 'Inconnu'}
+DATE         : ${formatDateString(message.date)}
+DOSSIER      : ${message.dossier || 'Général'}
+OBJET        : ${message.objet || '(Sans objet)'}
+==================================================
+
+${message.message}
+`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    const safeSubject = (message.objet || 'message').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    link.href = url;
+    link.download = `${safeSubject}_${message.id}.txt`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden relative">
       {/* BARRE D'ACTION SUPÉRIEURE */}
@@ -135,6 +162,17 @@ export default function MessageDetail({
                   <span>Transférer</span>
                 </button>
               )}
+
+              {/* NOUVEAU : BOUTON TÉLÉCHARGER */}
+              <button
+                id="btn-download-detail"
+                onClick={handleDownloadMessage}
+                title="Télécharger l'e-mail sur votre disque dur"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Télécharger</span>
+              </button>
 
               {onToggleHideMessage && (
                 <button
@@ -273,7 +311,7 @@ export default function MessageDetail({
                   onClick={handleConfirmDelete}
                   className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
                 >
-                  Confirm
+                  Confirmer
                 </button>
               </div>
             </motion.div>
