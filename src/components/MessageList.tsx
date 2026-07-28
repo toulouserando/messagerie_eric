@@ -1,15 +1,3 @@
-Voici votre composant **`MessageList.tsx`** entièrement corrigé.
-
-### 🛠️ Ce qui a été ajouté et corrigé :
-
-1. **Imports Lucide** : Ajout des icônes `Printer` et `Download` absentes.
-2. **Fonction `handleDownloadSingleMessage**` : Télécharge directement le fichier `.txt` unique de la carte cliquée (avec `e.stopPropagation()` pour éviter de changer de sélection intempestivement).
-3. **Fonction `handlePrintSingleMessage**` : Sélectionne l'email puis déclenche `window.print()` pour l'imprimer.
-4. **Boutons dans la carte** : Intégration des deux nouvelles icônes (Télécharger 📥 et Imprimer 🖨️) juste avant le bouton masquer/œil et la corbeille.
-
----
-
-```tsx
 import { useState } from 'react';
 import { Message } from '../types';
 import { Search, Mail, Trash2, Eye, EyeOff, Printer, Download } from 'lucide-react';
@@ -66,7 +54,7 @@ export default function MessageList({
     }
   };
 
-  // FONCTION : Télécharger un message individuel depuis la carte
+  // TÉLÉCHARGER UN MESSAGE INDIVIDUEL (.txt)
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
     const content = `==================================================
@@ -92,7 +80,7 @@ ${msg.message}
     URL.revokeObjectURL(url);
   };
 
-  // FONCTION : Imprimer un message individuel depuis la carte
+  // IMPRIMER UN MESSAGE INDIVIDUEL
   const handlePrintSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
     onSelectMessage(msg);
@@ -178,7 +166,7 @@ ${msg.message}
                     </span>
 
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      {/* BOUTON TÉLÉCHARGER CE MESSAGE */}
+                      {/* BOUTON TÉLÉCHARGER */}
                       <button
                         onClick={(e) => handleDownloadSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
@@ -187,7 +175,7 @@ ${msg.message}
                         <Download className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* BOUTON IMPRIMER CE MESSAGE */}
+                      {/* BOUTON IMPRIMER */}
                       <button
                         onClick={(e) => handlePrintSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
@@ -233,5 +221,3 @@ ${msg.message}
     </div>
   );
 }
-
-```
