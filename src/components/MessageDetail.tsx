@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { Message } from '../types';
 import { 
   Mail, Calendar, User, Folder, Trash2, ShieldCheck, 
-  Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle 
+  Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle, RotateCcw 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface MessageDetailProps {
   message: Message | null;
   onDeleteMessage: (id: string) => void;
+  onRestoreMessage?: (id: string) => void;
   onReplyMessage?: (message: Message) => void;
   onForwardMessage?: (message: Message) => void;
   onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
@@ -17,6 +18,7 @@ interface MessageDetailProps {
 export default function MessageDetail({
   message,
   onDeleteMessage,
+  onRestoreMessage,
   onReplyMessage,
   onForwardMessage,
   onToggleHideMessage,
@@ -24,7 +26,7 @@ export default function MessageDetail({
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Ferme la fenêtre de confirmation de suppression si l'utilisateur change de message
+  // Ferme la fenêtre de confirmation si l'utilisateur change de message
   useEffect(() => {
     setShowDeleteConfirm(false);
   }, [message?.id]);
@@ -72,16 +74,18 @@ export default function MessageDetail({
 
   return (
     <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden relative">
-      {/* Barre d'action supérieure */}
+      {/* BARRE D'ACTION SUPÉRIEURE */}
       <div className="px-8 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/40">
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-mono font-bold uppercase tracking-wider border ${
-            message.dossier === 'Sherpa'
-              ? 'bg-blue-50 text-blue-700 border-blue-200/60'
-              : message.dossier === 'Divers'
-              ? 'bg-amber-50 text-amber-700 border-amber-200/60'
-              : 'bg-purple-50 text-purple-700 border-purple-200/60'
-          }`}>
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-mono font-bold uppercase tracking-wider border ${
+              message.dossier === 'Sherpa'
+                ? 'bg-blue-50 text-blue-700 border-blue-200/60'
+                : message.dossier === 'Divers'
+                ? 'bg-amber-50 text-amber-700 border-amber-200/60'
+                : 'bg-purple-50 text-purple-700 border-purple-200/60'
+            }`}
+          >
             <Folder className="w-3.5 h-3.5 stroke-[2]" />
             Dossier : {message.dossier}
           </span>
@@ -91,62 +95,82 @@ export default function MessageDetail({
           </span>
         </div>
 
-        {/* Boutons d'actions */}
+        {/* BOUTONS D'ACTIONS */}
         <div className="flex items-center gap-2">
-          {onReplyMessage && (
-            <button
-              id="btn-reply-detail"
-              onClick={() => onReplyMessage(message)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-            >
-              <Reply className="w-3.5 h-3.5" />
-              <span>Répondre</span>
-            </button>
-          )}
-
-          {onForwardMessage && (
-            <button
-              id="btn-forward-detail"
-              onClick={() => onForwardMessage(message)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-            >
-              <Forward className="w-3.5 h-3.5" />
-              <span>Transférer</span>
-            </button>
-          )}
-
-          {onToggleHideMessage && (
-            <button
-              id="btn-hide-detail"
-              onClick={() => onToggleHideMessage(message.id, !!message.masque)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-            >
-              {message.masque ? (
-                <>
-                  <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Réafficher</span>
-                </>
-              ) : (
-                <>
-                  <EyeOff className="w-3.5 h-3.5 text-gray-500" />
-                  <span>Masquer</span>
-                </>
+          {/* SI LE MESSAGE EST DANS LA CORBEILLE */}
+          {message.is_deleted ? (
+            <>
+              {onRestoreMessage && (
+                <button
+                  id="btn-restore-detail"
+                  onClick={() => onRestoreMessage(message.id)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restauration</span>
+                </button>
               )}
-            </button>
+            </>
+          ) : (
+            /* ACTIONS CLASSIQUES (HORS CORBEILLE) */
+            <>
+              {onReplyMessage && (
+                <button
+                  id="btn-reply-detail"
+                  onClick={() => onReplyMessage(message)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                >
+                  <Reply className="w-3.5 h-3.5" />
+                  <span>Répondre</span>
+                </button>
+              )}
+
+              {onForwardMessage && (
+                <button
+                  id="btn-forward-detail"
+                  onClick={() => onForwardMessage(message)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                >
+                  <Forward className="w-3.5 h-3.5" />
+                  <span>Transférer</span>
+                </button>
+              )}
+
+              {onToggleHideMessage && (
+                <button
+                  id="btn-hide-detail"
+                  onClick={() => onToggleHideMessage(message.id, !!message.masque)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                >
+                  {message.masque ? (
+                    <>
+                      <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Réafficher</span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="w-3.5 h-3.5 text-gray-500" />
+                      <span>Masquer</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </>
           )}
 
+          {/* SUPPRESSION */}
           <button
             id="btn-delete-detail"
             onClick={() => setShowDeleteConfirm(true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Supprimer</span>
+            <span>{message.is_deleted ? 'Supprimer définitivement' : 'Supprimer'}</span>
           </button>
         </div>
       </div>
 
-      {/* Détails du contenu */}
+      {/* DÉTAILS DU CONTENU */}
       <div className="flex-1 overflow-y-auto p-8 lg:p-10">
         <div className="mb-8 border-b border-gray-100 pb-6">
           <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-950 leading-tight">
@@ -154,7 +178,7 @@ export default function MessageDetail({
           </h1>
         </div>
 
-        {/* Métadonnées */}
+        {/* MÉTADONNÉES */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50/50 border border-gray-200 p-5 rounded-xl mb-8">
           <div className="space-y-1.5 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
@@ -193,7 +217,7 @@ export default function MessageDetail({
           </div>
         </div>
 
-        {/* Corps du message */}
+        {/* CORPS DU MESSAGE */}
         <div className="text-left">
           <div className="flex items-center justify-between mb-4">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
@@ -230,10 +254,12 @@ export default function MessageDetail({
               </div>
 
               <h3 className="text-base font-bold text-gray-900 mb-1">
-                Supprimer ce message ?
+                {message.is_deleted ? 'Supprimer définitivement ?' : 'Placer dans la corbeille ?'}
               </h3>
               <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-                Cette action supprimera définitivement ce message. L'opération est irréversible.
+                {message.is_deleted
+                  ? 'Cette action supprimera définitivement ce message. L\'opération est irréversible.'
+                  : 'Le message sera déplacé vers la corbeille. Vous pourrez le restaurer ultérieurement.'}
               </p>
 
               <div className="flex items-center justify-center gap-3">
@@ -247,7 +273,7 @@ export default function MessageDetail({
                   onClick={handleConfirmDelete}
                   className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
                 >
-                  Supprimer
+                  Confirm
                 </button>
               </div>
             </motion.div>

@@ -74,7 +74,7 @@ export default function App() {
         dossier: item.theme || 'Général',
         date: item.created_at,
         masque: item.is_archived || false,
-        is_deleted: item.is_deleted || false, // Prise en compte de la corbeille
+        is_deleted: item.is_deleted || false,
       }));
 
       setMessages(formattedMessages);
@@ -171,7 +171,6 @@ export default function App() {
   const handleDeleteMessage = async (id: string) => {
     const targetMsg = messages.find((m) => m.id === id);
 
-    // Si le message est déjà dans la corbeille -> Suppression définitive
     if (targetMsg?.is_deleted || selectedFolderId === 'corbeille') {
       const { error } = await supabase.from('messages').delete().eq('id', id);
       if (error) {
@@ -180,7 +179,6 @@ export default function App() {
       }
       setMessages((prev) => prev.filter((m) => m.id !== id));
     } else {
-      // Sinon -> Déplacement vers la corbeille (Soft Delete)
       const { error } = await supabase.from('messages').update({ is_deleted: true }).eq('id', id);
       if (error) {
         console.error('Erreur lors du déplacement en corbeille :', error.message);
@@ -190,6 +188,23 @@ export default function App() {
         prev.map((m) => (m.id === id ? { ...m, is_deleted: true } : m))
       );
     }
+
+    if (selectedMessageId === id) {
+      setSelectedMessageId(null);
+    }
+  };
+
+  // RESTAURER UN MESSAGE DE LA CORBEILLE
+  const handleRestoreMessage = async (id: string) => {
+    const { error } = await supabase.from('messages').update({ is_deleted: false }).eq('id', id);
+    if (error) {
+      console.error('Erreur lors de la restauration :', error.message);
+      return;
+    }
+
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, is_deleted: false } : m))
+    );
 
     if (selectedMessageId === id) {
       setSelectedMessageId(null);
@@ -217,11 +232,10 @@ export default function App() {
 
   const filteredMessages = useMemo(() => {
     return messages.filter((msg) => {
-      // 1. Filtrage par dossier & corbeille
       if (selectedFolderId === 'corbeille') {
-        if (!msg.is_deleted) return false; // Seuls les éléments supprimés vont dans la corbeille
+        if (!msg.is_deleted) return false;
       } else {
-        if (msg.is_deleted) return false; // On exclut la corbeille des dossiers normaux
+        if (msg.is_deleted) return false;
 
         if (selectedFolderId === 'masques') {
           if (!msg.masque) return false;
@@ -233,7 +247,6 @@ export default function App() {
         }
       }
 
-      // 2. Recherche globale
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchGlobal =
@@ -246,7 +259,6 @@ export default function App() {
         if (!matchGlobal) return false;
       }
 
-      // 3. Recherche Avancée (Filtres ciblés)
       if (filters.objet && !msg.objet?.toLowerCase().includes(filters.objet.toLowerCase())) {
         return false;
       }
@@ -332,7 +344,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* BOUTON VIDER LA CORBEILLE (Affiché uniquement dans le dossier Corbeille) */}
+          {/* BOUTON VIDER LA CORBEILLE */}
           {selectedFolderId === 'corbeille' ? (
             <button
               onClick={handleEmptyTrash}
@@ -354,17 +366,18 @@ export default function App() {
             Chargement de la messagerie...
           </div>
         ) : viewMode === 'pages' ? (
-          /* MODE PAGES */
+          /* MODE PAGES CORRIGÉ */
           <KeywordPagesView
             messages={messages.filter((m) => !m.is_deleted)}
-            activeKeyword={selectedFolderId === 'tous' ? 'Home' : selectedFolderId}
+            activeKeyword={selectedFolderId}
+            onSelectKeyword={(folder) => setSelectedFolderId(folder.toLowerCase())}
             onDeleteMessage={handleDeleteMessage}
             onReplyMessage={handleReplyMessage}
             onForwardMessage={handleForwardMessage}
             onToggleHideMessage={handleToggleHideMessage}
           />
         ) : (
-          /* MODE MESSAGERE TRADITIONNEL */
+          /* MODE MESSAGERIE TRADITIONNEL */
           <div className="flex-1 flex h-full overflow-hidden">
             <div className="flex flex-col border-r border-gray-200 w-80 lg:w-96 shrink-0 h-full">
               <SearchBar onSearch={handleSearchChange} />
@@ -381,6 +394,7 @@ export default function App() {
             <MessageDetail
               message={selectedMessage}
               onDeleteMessage={handleDeleteMessage}
+              onRestoreMessage={handleRestoreMessage}
               onReplyMessage={handleReplyMessage}
               onForwardMessage={handleForwardMessage}
               onToggleHideMessage={handleToggleHideMessage}

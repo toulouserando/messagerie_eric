@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Message } from '../types';
 import { 
   FileText, Trash2, Reply, Forward, Eye, EyeOff, Search, 
-  Tag, Calendar, User, Printer 
+  Tag, Calendar, User, Printer, Download 
 } from 'lucide-react';
 
 interface KeywordPagesViewProps {
@@ -31,12 +31,47 @@ export default function KeywordPagesView({
 }: KeywordPagesViewProps) {
   const [searchFilter, setSearchFilter] = useState('');
 
-  // Filtrage des messages pour le mot-clé actif
+  // Fonction pour télécharger localement un e-mail au format TXT sur votre disque dur
+  const handleDownloadMessage = (msg: Message) => {
+    const content = `==================================================
+De         : ${msg.expediteur || 'Inconnu'}
+À          : ${msg.destinataire || 'Inconnu'}
+Date       : ${new Date(msg.date).toLocaleString('fr-FR')}
+Dossier    : ${msg.dossier}
+Objet      : ${msg.objet || '(Sans objet)'}
+==================================================
+
+${msg.message}
+`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    // Génération d'un nom de fichier propre à partir de l'objet du message
+    const safeSubject = (msg.objet || 'message').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    link.href = url;
+    link.download = `${safeSubject}_${msg.id}.txt`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Filtrage des messages selon le mot-clé actif
   const getMessagesForKeyword = (keyword: string) => {
+    const kwLower = keyword.toLowerCase();
+
     return messages.filter((msg) => {
-      if (keyword === 'Tous') return !msg.masque;
-      const text = `${msg.objet} ${msg.message} ${msg.dossier}`.toLowerCase();
-      return text.includes(keyword.toLowerCase());
+      if (kwLower === 'tous') {
+        return !msg.masque;
+      }
+
+      const isSameFolder = msg.dossier?.toLowerCase() === kwLower;
+      const textMatch = `${msg.objet} ${msg.message}`.toLowerCase().includes(kwLower);
+
+      return (isSameFolder || textMatch) && !msg.masque;
     });
   };
 
@@ -169,6 +204,15 @@ export default function KeywordPagesView({
                     </div>
 
                     <div className="flex items-center gap-1">
+                      {/* BOUTON TÉLÉCHARGER SUR LE DISQUE DUR */}
+                      <button
+                        onClick={() => handleDownloadMessage(msg)}
+                        title="Télécharger sur le disque dur"
+                        className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-white rounded cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+
                       <button
                         onClick={() => onReplyMessage(msg)}
                         title="Répondre"
