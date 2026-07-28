@@ -1,15 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { X, Send, User, Tag } from 'lucide-react';
+import { motion } from 'framer-motion'; // Changé 'motion/react' par 'framer-motion'
+import { X, Send, User, Tag, AlertCircle } from 'lucide-react';
 import { Message } from '../types';
 
 interface NewMessageModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSendMessage: (messageData: Omit<Message, 'id' | 'date' | 'expediteur'>) => void;
+  initialData?: {
+    destinataire?: string;
+    objet?: string;
+    message?: string;
+  };
 }
 
-export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewMessageModalProps) {
+export default function NewMessageModal({
+  isOpen,
+  onClose,
+  onSendMessage,
+  initialData = {},
+}: NewMessageModalProps) {
   const MY_EMAIL = 'ericgalaxy5@free.fr';
 
   const [destinataire, setDestinataire] = useState('');
@@ -17,17 +27,29 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
   const [message, setMessage] = useState('');
   const [computedFolder, setComputedFolder] = useState('Divers');
 
+  // État pour gérer les avertissements/erreurs
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   // Extrait le premier mot de l'objet pour en faire le nom du dossier
   const extractFolder = (subject: string): string => {
     const trimmed = subject.trim();
     if (!trimmed) return 'Divers';
-    
+
     const firstWord = trimmed.split(/\s+/)[0];
-    const cleaned = firstWord.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, "");
-    
+    const cleaned = firstWord.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, '');
+
     if (!cleaned) return 'Divers';
     return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      setDestinataire(initialData.destinataire || '');
+      setObjet(initialData.objet || '');
+      setMessage(initialData.message || '');
+      setErrorMessage(null); // Réinitialise les alertes à l'ouverture
+    }
+  }, [isOpen, initialData]);
 
   useEffect(() => {
     setComputedFolder(extractFolder(objet));
@@ -35,18 +57,46 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setErrorMessage(null);
+
+    // --- CONTROLES DE VALIDATION ---
+    if (!destinataire.trim()) {
+      setErrorMessage('Veuillez indiquer un destinataire.');
+      return;
+    }
+
+    // Validation du format email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(destinataire.trim())) {
+      setErrorMessage("L'adresse e-mail du destinataire n'est pas valide.");
+      return;
+    }
+
+    if (!objet.trim()) {
+      setErrorMessage('Veuillez renseigner un objet pour votre message.');
+      return;
+    }
+
+    if (!message.trim()) {
+      setErrorMessage('Le corps du message ne peut pas être vide.');
+      return;
+    }
+
+    // --- ENVOI ---
     onSendMessage({
       destinataire: destinataire.trim(),
       objet: objet.trim(),
       message: message.trim(),
       dossier: computedFolder,
+      masque: false,
+      is_deleted: false,
     });
 
     // Reset des champs
     setDestinataire('');
     setObjet('');
     setMessage('');
+    setErrorMessage(null);
     onClose();
   };
 
@@ -77,19 +127,30 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
           </button>
         </div>
 
+        {/* Message d'avertissement dynamique */}
+        {errorMessage && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2.5 text-xs text-red-700 font-medium">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Destinataire */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <label htmlFor="input-destinataire" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
-                Destinataire
+                Destinataire <span className="text-red-500">*</span>
               </label>
               
               {/* Bouton raccourci pour s'envoyer à soi-même */}
               <button
                 type="button"
-                onClick={() => setDestinataire(MY_EMAIL)}
+                onClick={() => {
+                  setDestinataire(MY_EMAIL);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
               >
                 + M'écrire à moi-même
@@ -103,10 +164,12 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
               <input
                 id="input-destinataire"
                 type="email"
-                required
                 list="contacts-list"
                 value={destinataire}
-                onChange={(e) => setDestinataire(e.target.value)}
+                onChange={(e) => {
+                  setDestinataire(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="nom@exemple.com"
                 className="block w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
               />
@@ -122,7 +185,7 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
           {/* Objet */}
           <div className="space-y-1">
             <label htmlFor="input-objet" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
-              Objet
+              Objet <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -132,7 +195,10 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
                 id="input-objet"
                 type="text"
                 value={objet}
-                onChange={(e) => setObjet(e.target.value)}
+                onChange={(e) => {
+                  setObjet(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="Ex : Sherpa - Nouveau rapport"
                 className="block w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
               />
@@ -164,15 +230,17 @@ export default function NewMessageModal({ isOpen, onClose, onSendMessage }: NewM
           {/* Message */}
           <div className="space-y-1">
             <label htmlFor="input-message" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
-              Message
+              Message <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <textarea
                 id="input-message"
-                required
                 rows={6}
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(e) => {
+                  setMessage(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="Votre message ici..."
                 className="block w-full px-4 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400 resize-none"
               />

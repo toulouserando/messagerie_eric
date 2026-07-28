@@ -1,5 +1,5 @@
 import { Folder, Message } from '../types';
-import { Plus, Folder as FolderIcon, Inbox, LogOut, EyeOff } from 'lucide-react';
+import { Plus, Folder as FolderIcon, Inbox, LogOut, EyeOff, Trash2 } from 'lucide-react';
 
 interface SidebarProps {
   messages: Message[];
@@ -16,8 +16,13 @@ export default function Sidebar({
   onNewMessageClick,
   onLogout,
 }: SidebarProps) {
-  const visibleMessages = messages.filter((m) => !m.masque);
-  const hiddenMessages = messages.filter((m) => m.masque);
+  // 1. On sépare les messages actifs (non supprimés) et les messages dans la corbeille
+  const activeMessages = messages.filter((m) => !m.is_deleted);
+  const trashMessages = messages.filter((m) => m.is_deleted === true);
+
+  // 2. Filtrage des messages visibles vs masqués parmi les actifs
+  const visibleMessages = activeMessages.filter((m) => !m.masque);
+  const hiddenMessages = activeMessages.filter((m) => m.masque);
 
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
@@ -54,6 +59,11 @@ export default function Sidebar({
         id: 'masques',
         name: 'Messages masqués',
         count: hiddenMessages.length,
+      },
+      {
+        id: 'corbeille',
+        name: 'Corbeille',
+        count: trashMessages.length,
       },
     ];
   };
@@ -94,6 +104,7 @@ export default function Sidebar({
           const isSelected = selectedFolderId === folder.id;
           const isAll = folder.id === 'tous';
           const isHiddenFolder = folder.id === 'masques';
+          const isTrashFolder = folder.id === 'corbeille';
 
           return (
             <button
@@ -102,7 +113,9 @@ export default function Sidebar({
               onClick={() => onSelectFolder(folder.id)}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm transition-all cursor-pointer group ${
                 isSelected
-                  ? 'bg-blue-50 text-blue-800 font-semibold border-r-4 border-blue-600 rounded-r-none'
+                  ? isTrashFolder
+                    ? 'bg-red-50 text-red-800 font-semibold border-r-4 border-red-600 rounded-r-none'
+                    : 'bg-blue-50 text-blue-800 font-semibold border-r-4 border-blue-600 rounded-r-none'
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
               }`}
             >
@@ -111,6 +124,8 @@ export default function Sidebar({
                   <Inbox className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
                 ) : isHiddenFolder ? (
                   <EyeOff className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                ) : isTrashFolder ? (
+                  <Trash2 className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-red-700' : 'text-gray-400 group-hover:text-red-600'}`} />
                 ) : (
                   <FolderIcon className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
                 )}
@@ -119,7 +134,9 @@ export default function Sidebar({
               <span
                 className={`text-xs font-mono font-medium px-2 py-0.5 rounded-full ${
                   isSelected
-                    ? 'bg-blue-200 text-blue-800'
+                    ? isTrashFolder
+                      ? 'bg-red-200 text-red-800'
+                      : 'bg-blue-200 text-blue-800'
                     : 'bg-gray-200 text-gray-600 group-hover:bg-gray-300/60'
                 }`}
               >
