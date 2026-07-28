@@ -6,11 +6,13 @@ export interface Message {
   dossier: string;
   date: string;
   expediteur: string;
-  masque?: boolean; // NOUVEAU
+  masque?: boolean;      // Conservé si vous l'utilisez déjà dans votre code
+  is_deleted?: boolean;  // Indique si le message est placé dans la corbeille
+  is_visible?: boolean;  // Indique si le message est visible ou masqué
 }
 
 export interface Folder {
-  id: string;
-  name: string;
+  id: string;   // Ex: 'tous', 'home', 'office', 'corbeille'
+  name: string; // Nom d'affichage
   count: number;
 }

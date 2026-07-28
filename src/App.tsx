@@ -14,7 +14,7 @@ import SearchBar, { AdvancedFilters } from './components/SearchBar';
 import KeywordPagesView from './components/KeywordPagesView';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
-import { FileText, Mail } from 'lucide-react';
+import { FileText, Mail, Trash2 } from 'lucide-react';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -74,11 +74,12 @@ export default function App() {
         dossier: item.theme || 'Général',
         date: item.created_at,
         masque: item.is_archived || false,
+        is_deleted: item.is_deleted || false, // Prise en compte de la corbeille
       }));
 
       setMessages(formattedMessages);
 
-      const visible = formattedMessages.filter((m) => !m.masque);
+      const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
       if (visible.length > 0 && !selectedMessageId) {
         setSelectedMessageId(visible[0].id);
       }
@@ -157,31 +158,58 @@ export default function App() {
         dossier: inserted.theme || 'Général',
         date: inserted.created_at,
         masque: false,
+        is_deleted: false,
       };
 
       setMessages((prev) => [newMsg, ...prev]);
       setSelectedMessageId(newMsg.id);
-
-      // RESTRICTI0N : On ne va PAS dans le dossier spécifique du mot-clé, on Reste sur "Tous les messages"
       setSelectedFolderId('tous');
     }
   };
 
+  // GESTION DE LA SUPPRESSION / CORBEILLE
   const handleDeleteMessage = async (id: string) => {
-    const { error } = await supabase.from('messages').delete().eq('id', id);
+    const targetMsg = messages.find((m) => m.id === id);
 
-    if (error) {
-      console.error('Erreur de suppression :', error.message);
-      return;
+    // Si le message est déjà dans la corbeille -> Suppression définitive
+    if (targetMsg?.is_deleted || selectedFolderId === 'corbeille') {
+      const { error } = await supabase.from('messages').delete().eq('id', id);
+      if (error) {
+        console.error('Erreur lors de la suppression définitive :', error.message);
+        return;
+      }
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+    } else {
+      // Sinon -> Déplacement vers la corbeille (Soft Delete)
+      const { error } = await supabase.from('messages').update({ is_deleted: true }).eq('id', id);
+      if (error) {
+        console.error('Erreur lors du déplacement en corbeille :', error.message);
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, is_deleted: true } : m))
+      );
     }
 
-    setMessages((prev) => prev.filter((m) => m.id !== id));
     if (selectedMessageId === id) {
       setSelectedMessageId(null);
     }
   };
 
-  // GESTION DE LA RECHERCHE ET DU FILTRAGE MULTI-CRITÈRES
+  // VIDER TOUTE LA CORBEILLE
+  const handleEmptyTrash = async () => {
+    const { error } = await supabase.from('messages').delete().eq('is_deleted', true);
+
+    if (error) {
+      console.error('Erreur lors du vidage de la corbeille :', error.message);
+      return;
+    }
+
+    setMessages((prev) => prev.filter((m) => !m.is_deleted));
+    setSelectedMessageId(null);
+  };
+
+  // RECHERCHE ET FILTRAGE MULTI-CRITÈRES
   const handleSearchChange = (query: string, newFilters: AdvancedFilters) => {
     setSearchTerm(query);
     setFilters(newFilters);
@@ -189,17 +217,23 @@ export default function App() {
 
   const filteredMessages = useMemo(() => {
     return messages.filter((msg) => {
-      // 1. Recherche par dossier actif
-      if (selectedFolderId === 'masques') {
-        if (!msg.masque) return false;
+      // 1. Filtrage par dossier & corbeille
+      if (selectedFolderId === 'corbeille') {
+        if (!msg.is_deleted) return false; // Seuls les éléments supprimés vont dans la corbeille
       } else {
-        if (msg.masque) return false; // Masque les éléments archivés dans les dossiers normaux
-        if (selectedFolderId !== 'tous' && msg.dossier.toLowerCase() !== selectedFolderId) {
-          return false;
+        if (msg.is_deleted) return false; // On exclut la corbeille des dossiers normaux
+
+        if (selectedFolderId === 'masques') {
+          if (!msg.masque) return false;
+        } else {
+          if (msg.masque) return false;
+          if (selectedFolderId !== 'tous' && msg.dossier.toLowerCase() !== selectedFolderId) {
+            return false;
+          }
         }
       }
 
-      // 2. Recherche globale (si du texte est entré dans la barre principale)
+      // 2. Recherche globale
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchGlobal =
@@ -257,6 +291,8 @@ export default function App() {
         onSelectFolder={(folderId) => {
           setSelectedFolderId(folderId);
           const filtered = messages.filter((msg) => {
+            if (folderId === 'corbeille') return msg.is_deleted === true;
+            if (msg.is_deleted) return false;
             if (folderId === 'masques') return msg.masque === true;
             if (msg.masque) return false;
             if (folderId === 'tous') return true;
@@ -296,9 +332,20 @@ export default function App() {
             </button>
           </div>
 
-          <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline">
-            Dossier : Tous les messages
-          </span>
+          {/* BOUTON VIDER LA CORBEILLE (Affiché uniquement dans le dossier Corbeille) */}
+          {selectedFolderId === 'corbeille' ? (
+            <button
+              onClick={handleEmptyTrash}
+              className="flex items-center gap-1.5 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition-all cursor-pointer shadow-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Vider la corbeille</span>
+            </button>
+          ) : (
+            <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline">
+              Dossier : {selectedFolderId.toUpperCase()}
+            </span>
+          )}
         </div>
 
         {/* CONTENU PRINCIPAL */}
@@ -307,9 +354,9 @@ export default function App() {
             Chargement de la messagerie...
           </div>
         ) : viewMode === 'pages' ? (
-          /* MODE PAGES (FORMAT DOCUMENT RÉDIGÉ) */
+          /* MODE PAGES */
           <KeywordPagesView
-            messages={messages}
+            messages={messages.filter((m) => !m.is_deleted)}
             activeKeyword={selectedFolderId === 'tous' ? 'Home' : selectedFolderId}
             onDeleteMessage={handleDeleteMessage}
             onReplyMessage={handleReplyMessage}
