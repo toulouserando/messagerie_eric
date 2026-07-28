@@ -14,7 +14,7 @@ import SearchBar, { AdvancedFilters } from './components/SearchBar';
 import KeywordPagesView from './components/KeywordPagesView';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
-import { FileText, Mail, Trash2 } from 'lucide-react';
+import { FileText, Mail, Trash2, Printer, Download } from 'lucide-react';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -296,29 +296,32 @@ export default function App() {
   }
 
   return (
-    <div id="app-workspace" className="flex h-screen w-full bg-white overflow-hidden text-gray-800 font-sans selection:bg-gray-100">
-      <Sidebar
-        messages={messages}
-        selectedFolderId={selectedFolderId}
-        onSelectFolder={(folderId) => {
-          setSelectedFolderId(folderId);
-          const filtered = messages.filter((msg) => {
-            if (folderId === 'corbeille') return msg.is_deleted === true;
-            if (msg.is_deleted) return false;
-            if (folderId === 'masques') return msg.masque === true;
-            if (msg.masque) return false;
-            if (folderId === 'tous') return true;
-            return msg.dossier.toLowerCase() === folderId;
-          });
-          setSelectedMessageId(filtered.length > 0 ? filtered[0].id : null);
-        }}
-        onNewMessageClick={handleOpenNewMessage}
-        onLogout={handleLogout}
-      />
+    <div id="app-workspace" className="flex h-screen w-full bg-white overflow-hidden text-gray-800 font-sans selection:bg-gray-100 print:h-auto print:overflow-visible">
+      {/* BARRE LATÉRALE - Masquée à l'impression */}
+      <div className="print:hidden">
+        <Sidebar
+          messages={messages}
+          selectedFolderId={selectedFolderId}
+          onSelectFolder={(folderId) => {
+            setSelectedFolderId(folderId);
+            const filtered = messages.filter((msg) => {
+              if (folderId === 'corbeille') return msg.is_deleted === true;
+              if (msg.is_deleted) return false;
+              if (folderId === 'masques') return msg.masque === true;
+              if (msg.masque) return false;
+              if (folderId === 'tous') return true;
+              return msg.dossier.toLowerCase() === folderId;
+            });
+            setSelectedMessageId(filtered.length > 0 ? filtered[0].id : null);
+          }}
+          onNewMessageClick={handleOpenNewMessage}
+          onLogout={handleLogout}
+        />
+      </div>
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* BARRE DE SÉLECTION DU MODE DE VUE */}
-        <div className="bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between shrink-0">
+      <div className="flex-1 flex flex-col h-full overflow-hidden print:h-auto print:overflow-visible">
+        {/* BARRE DE SÉLECTION DU MODE DE VUE ET D'IMPRESSION - Masquée à l'impression */}
+        <div className="bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center gap-1 bg-gray-200/80 p-1 rounded-lg">
             <button
               onClick={() => setViewMode('messagerie')}
@@ -344,29 +347,49 @@ export default function App() {
             </button>
           </div>
 
-          {/* BOUTON VIDER LA CORBEILLE */}
-          {selectedFolderId === 'corbeille' ? (
+          <div className="flex items-center gap-2">
+            {/* BOUTONS D'IMPRESSION DU DOSSIER EN COURS */}
             <button
-              onClick={handleEmptyTrash}
-              className="flex items-center gap-1.5 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition-all cursor-pointer shadow-xs"
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-md text-xs font-semibold transition-all cursor-pointer"
+              title="Envoyer tous les messages du dossier sélectionné vers votre imprimante"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Vider la corbeille</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span>Imprimer Boîte ({filteredMessages.length})</span>
             </button>
-          ) : (
-            <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline">
-              Dossier : {selectedFolderId.toUpperCase()}
-            </span>
-          )}
+
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-semibold transition-all cursor-pointer"
+              title="Générer au format PDF"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>PDF</span>
+            </button>
+
+            {/* BOUTON VIDER LA CORBEILLE */}
+            {selectedFolderId === 'corbeille' ? (
+              <button
+                onClick={handleEmptyTrash}
+                className="flex items-center gap-1.5 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition-all cursor-pointer shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Vider la corbeille</span>
+              </button>
+            ) : (
+              <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline ml-2">
+                Dossier : {selectedFolderId.toUpperCase()}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* CONTENU PRINCIPAL */}
+        {/* CONTENU PRINCIPAL (ÉCRAN) */}
         {loading ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500 text-xs font-medium">
+          <div className="flex-1 flex items-center justify-center text-gray-500 text-xs font-medium print:hidden">
             Chargement de la messagerie...
           </div>
         ) : viewMode === 'pages' ? (
-          /* MODE PAGES CORRIGÉ */
           <KeywordPagesView
             messages={messages.filter((m) => !m.is_deleted)}
             activeKeyword={selectedFolderId}
@@ -377,8 +400,7 @@ export default function App() {
             onToggleHideMessage={handleToggleHideMessage}
           />
         ) : (
-          /* MODE MESSAGERIE TRADITIONNEL */
-          <div className="flex-1 flex h-full overflow-hidden">
+          <div className="flex-1 flex h-full overflow-hidden print:hidden">
             <div className="flex flex-col border-r border-gray-200 w-80 lg:w-96 shrink-0 h-full">
               <SearchBar onSearch={handleSearchChange} />
               <MessageList
@@ -399,6 +421,41 @@ export default function App() {
               onForwardMessage={handleForwardMessage}
               onToggleHideMessage={handleToggleHideMessage}
             />
+          </div>
+        )}
+
+        {/* GABARIT EXCLUSIF POUR L'IMPRESSION DE LA BOÎTE DE RÉCEPTION */}
+        {viewMode === 'messagerie' && (
+          <div className="hidden print:block p-4 bg-white text-black font-sans">
+            <div className="border-b-2 border-black pb-3 mb-4">
+              <h1 className="text-xl font-bold uppercase">
+                Boîte de Réception — Dossier : {selectedFolderId}
+              </h1>
+              <p className="text-xs text-gray-600 mt-1">
+                Impression générée le {new Date().toLocaleString('fr-FR')} | Nombre de messages : {filteredMessages.length}
+              </p>
+            </div>
+
+            {filteredMessages.length === 0 ? (
+              <p className="text-sm italic">Aucun message dans ce dossier.</p>
+            ) : (
+              <div className="space-y-4">
+                {filteredMessages.map((msg, idx) => (
+                  <article key={msg.id} className="border-b border-gray-300 pb-3">
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>#{idx + 1} | De : {msg.expediteur || 'Inconnu'}</span>
+                      <span>{new Date(msg.date).toLocaleString('fr-FR')}</span>
+                    </div>
+                    <div className="text-xs font-semibold mb-1">
+                      À : {msg.destinataire || 'Inconnu'} | Objet : {msg.objet || '(Sans objet)'}
+                    </div>
+                    <div className="text-xs pl-2 border-l-2 border-gray-400 whitespace-pre-wrap leading-snug">
+                      {msg.message}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
