@@ -83,7 +83,12 @@ export default function App() {
 
       const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
       if (visible.length > 0 && !selectedMessageId) {
-        setSelectedMessageId(visible[0].id);
+        const firstMsg = visible[0];
+        setSelectedMessageId(firstMsg.id);
+        // S'il est non lu à l'ouverture, on le marque automatiquement comme lu
+        if (!firstMsg.is_read) {
+          markAsRead(firstMsg.id);
+        }
       }
     }
     setLoading(false);
@@ -136,6 +141,19 @@ export default function App() {
     );
   };
 
+  // MARQUAGE FORCE EN "LU"
+  const markAsRead = async (id: string) => {
+    const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', id);
+    if (error) {
+      console.error('Erreur mise à jour statut lu :', error.message);
+      return;
+    }
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, is_read: true } : m))
+    );
+  };
+
+  // BASCULE MANUELLE LU / NON LU (Bouton dans MessageDetail)
   const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
     const newReadStatus = !currentReadStatus;
 
@@ -148,6 +166,14 @@ export default function App() {
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, is_read: newReadStatus } : m))
     );
+  };
+
+  // SELECTION D'UN MESSAGE (AVEC MARQUAGE AUTOMATIQUE EN LU)
+  const handleSelectMessage = (msg: Message) => {
+    setSelectedMessageId(msg.id);
+    if (!msg.is_read) {
+      markAsRead(msg.id);
+    }
   };
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
@@ -186,7 +212,7 @@ export default function App() {
         date: inserted.created_at,
         masque: false,
         is_deleted: false,
-        is_read: false,
+        is_read: true, // Un message envoyé par soi-même est déjà "lu"
       };
 
       setMessages((prev) => [newMsg, ...prev]);
@@ -318,7 +344,7 @@ export default function App() {
 
   const handleFolderSelect = (folderId: string) => {
     setSelectedFolderId(folderId);
-    // On sélectionne automatiquement le premier message visible correspondant au nouveau dossier
+    
     const nextFolderMessages = messages.filter((msg) => {
       if (folderId === 'corbeille') return msg.is_deleted;
       if (msg.is_deleted) return false;
@@ -327,7 +353,16 @@ export default function App() {
       if (folderId === 'tous') return true;
       return (msg.dossier || '').toLowerCase() === folderId.toLowerCase();
     });
-    setSelectedMessageId(nextFolderMessages.length > 0 ? nextFolderMessages[0].id : null);
+
+    if (nextFolderMessages.length > 0) {
+      const firstMsg = nextFolderMessages[0];
+      setSelectedMessageId(firstMsg.id);
+      if (!firstMsg.is_read) {
+        markAsRead(firstMsg.id);
+      }
+    } else {
+      setSelectedMessageId(null);
+    }
   };
 
   const selectedMessage = messages.find((m) => m.id === selectedMessageId) || null;
@@ -433,7 +468,7 @@ export default function App() {
                 messages={filteredMessages}
                 selectedFolderId={selectedFolderId}
                 selectedMessageId={selectedMessageId}
-                onSelectMessage={(msg) => setSelectedMessageId(msg.id)}
+                onSelectMessage={handleSelectMessage}
                 onDeleteMessage={handleDeleteMessage}
                 onToggleHideMessage={handleToggleHideMessage}
               />

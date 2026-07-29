@@ -22,28 +22,20 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Utilisation de useMemo pour optimiser les performances de filtrage
   const finalFiltered = useMemo(() => {
-    // 1. Filtrage par dossier / statut (Masqué / Corbeille)
     const folderFiltered = messages.filter((msg) => {
       const isHidden = msg.masque === true || msg.is_visible === false;
       const isDeleted = msg.is_deleted === true;
 
-      // Vues spéciales
       if (selectedFolderId === 'masques') return isHidden;
       if (selectedFolderId === 'corbeille') return isDeleted;
 
-      // Exclure les masqués et supprimés des autres dossiers (y compris "tous")
       if (isHidden || isDeleted) return false;
-
-      // Vue "tous" les messages (actifs)
       if (selectedFolderId === 'tous') return true;
 
-      // Filtrage par nom de dossier
       return (msg.dossier || '').toLowerCase() === selectedFolderId.toLowerCase();
     });
 
-    // 2. Recherche par mot-clé
     if (!searchQuery.trim()) return folderFiltered;
 
     const query = searchQuery.toLowerCase().trim();
@@ -62,7 +54,7 @@ export default function MessageList({
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return dateStr;
-      
+
       return d.toLocaleDateString('fr-FR', {
         day: 'numeric',
         month: 'short',
@@ -74,7 +66,6 @@ export default function MessageList({
     }
   };
 
-  // TÉLÉCHARGER UN MESSAGE INDIVIDUEL (.txt)
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
 
@@ -103,7 +94,6 @@ ${textContent}
     URL.revokeObjectURL(url);
   };
 
-  // IMPRIMER UN MESSAGE INDIVIDUEL
   const handlePrintSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
     onSelectMessage(msg);
@@ -144,6 +134,7 @@ ${textContent}
             {finalFiltered.map((msg) => {
               const isSelected = selectedMessageId === msg.id;
               const isHidden = msg.masque === true || msg.is_visible === false;
+              const isUnread = !msg.is_read; // VÉRIFICATION STATUT LECTURE
 
               return (
                 <motion.div
@@ -158,19 +149,29 @@ ${textContent}
                   className={`group relative p-4 rounded-xl border text-left cursor-pointer transition-all ${
                     isSelected
                       ? 'bg-white border-blue-600 ring-2 ring-blue-600/10 shadow-md shadow-blue-100/30'
+                      : isUnread
+                      ? 'bg-blue-50/40 border-blue-200 hover:bg-blue-50/70'
                       : 'bg-white hover:bg-gray-50 border-gray-200 shadow-xs'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="text-xs font-semibold text-gray-800 truncate">
-                      À : {msg.destinataire || 'Non spécifié'}
-                    </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {/* PASTILLE BLEUE SI NON LU */}
+                      {isUnread && (
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0 animate-pulse" title="Message non lu" />
+                      )}
+                      <span className={`text-xs truncate ${isUnread ? 'font-bold text-gray-950' : 'font-semibold text-gray-700'}`}>
+                        À : {msg.destinataire || 'Non spécifié'}
+                      </span>
+                    </div>
+
                     <span className="text-[10px] text-gray-400 font-medium shrink-0 font-mono">
                       {formatDate(msg.date)}
                     </span>
                   </div>
 
-                  <h4 className={`text-sm font-bold text-gray-800 line-clamp-1 mb-2 ${isSelected ? 'text-blue-900' : ''}`}>
+                  {/* TITRE DE L'OBJET EN GRAS SI NON LU */}
+                  <h4 className={`text-sm line-clamp-1 mb-2 ${isUnread ? 'font-extrabold text-blue-950' : 'font-semibold text-gray-800'}`}>
                     {msg.objet || '(Sans objet)'}
                   </h4>
 
@@ -190,7 +191,6 @@ ${textContent}
                     </span>
 
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      {/* TÉLÉCHARGER */}
                       <button
                         onClick={(e) => handleDownloadSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
@@ -199,7 +199,6 @@ ${textContent}
                         <Download className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* IMPRIMER */}
                       <button
                         onClick={(e) => handlePrintSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
@@ -208,7 +207,6 @@ ${textContent}
                         <Printer className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* MASQUER / RÉAFFICHER */}
                       {onToggleHideMessage && (
                         <button
                           onClick={(e) => {
@@ -222,7 +220,6 @@ ${textContent}
                         </button>
                       )}
 
-                      {/* SUPPRIMER */}
                       <button
                         id={`btn-delete-${msg.id}`}
                         onClick={(e) => {

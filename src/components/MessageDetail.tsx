@@ -3,7 +3,7 @@ import { Message } from '../types';
 import { 
   Mail, Calendar, User, Folder, Trash2, ShieldCheck, 
   Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle, RotateCcw, Download, Printer,
-  MailOpen, MailCheck 
+  MailOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import DOMPurify from 'dompurify';
@@ -106,7 +106,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
 
   return (
     <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden relative print:overflow-visible">
-      {/* BARRE D'ACTION SUPÉRIEURE - Masquée à l'impression */}
+      {/* BARRE D'ACTION SUPÉRIEURE */}
       <div className="px-8 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/40 print:hidden">
         <div className="flex items-center gap-2">
           <span
@@ -131,7 +131,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
         <div className="flex items-center gap-2">
           <button
             onClick={() => window.print()}
-            title="Imprimer uniquement ce message sur votre imprimante"
+            title="Imprimer uniquement ce message"
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
@@ -185,7 +185,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
                 <span>Télécharger</span>
               </button>
 
-              {/* BOUTON MARQUER COMME LU / NON LU */}
+              {/* BOUTON LU / NON LU CORRIGÉ */}
               {onToggleReadMessage && (
                 <button
                   id="btn-toggle-read-detail"
@@ -201,7 +201,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
                   ) : (
                     <>
                       <MailOpen className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Marquer lu</span>
+                      <span className="text-blue-600 font-bold">Marquer lu</span>
                     </>
                   )}
                 </button>
@@ -242,10 +242,17 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
 
       {/* DÉTAILS DU CONTENU */}
       <div className="flex-1 overflow-y-auto p-8 lg:p-10 print:p-0 print:overflow-visible">
-        <div className="mb-8 border-b border-gray-100 pb-6 print:mb-4 print:pb-2">
+        <div className="mb-8 border-b border-gray-100 pb-6 print:mb-4 print:pb-2 flex items-start justify-between gap-4">
           <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-950 leading-tight print:text-lg">
             {message.objet || '(Sans objet)'}
           </h1>
+          
+          {/* BADGE D'ÉTAT LECTURE DANS L'EN-TÊTE */}
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase shrink-0 ${
+            message.is_read ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-500/20'
+          }`}>
+            {message.is_read ? 'Lu' : 'Non lu'}
+          </span>
         </div>
 
         {/* MÉTADONNÉES */}
