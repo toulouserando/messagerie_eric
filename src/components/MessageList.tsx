@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Message } from '../types';
-import { Search, Mail, Trash2, Eye, EyeOff, Printer, Download } from 'lucide-react';
+import { Search, Mail, MailOpen, Trash2, Eye, EyeOff, Printer, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface MessageListProps {
@@ -10,6 +10,7 @@ interface MessageListProps {
   onSelectMessage: (message: Message) => void;
   onDeleteMessage: (id: string) => void;
   onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
+  onToggleReadMessage?: (id: string, currentReadStatus: boolean) => void;
 }
 
 export default function MessageList({
@@ -19,6 +20,7 @@ export default function MessageList({
   onSelectMessage,
   onDeleteMessage,
   onToggleHideMessage,
+  onToggleReadMessage,
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -195,6 +197,20 @@ ${textContent}
                     </span>
 
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      {/* ACTION RAPIDE LU / NON LU DANS LA LISTE */}
+                      {onToggleReadMessage && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleReadMessage(msg.id, !!msg.is_read);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title={msg.is_read ? 'Marquer comme non lu' : 'Marquer comme lu'}
+                        >
+                          {msg.is_read ? <Mail className="w-3.5 h-3.5 text-amber-600" /> : <MailOpen className="w-3.5 h-3.5 text-blue-600" />}
+                        </button>
+                      )}
+
                       <button
                         onClick={(e) => handleDownloadSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"

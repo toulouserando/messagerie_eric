@@ -185,7 +185,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
                 <span>Télécharger</span>
               </button>
 
-              {/* BOUTON LU / NON LU CORRIGÉ */}
+              {/* BOUTON MARQUER LU / NON LU */}
               {onToggleReadMessage && (
                 <button
                   id="btn-toggle-read-detail"
@@ -343,7 +343,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
               </h3>
               <p className="text-xs text-gray-500 mb-6 leading-relaxed">
                 {message.is_deleted
-                  ? 'Cette action supprimera définitivement ce message. L\'opération est irréversible.'
+                  ? "Cette action supprimera définitivement ce message. L'opération est irréversible."
                   : 'Le message sera déplacé vers la corbeille. Vous pourrez le restaurer ultérieurement.'}
               </p>
 

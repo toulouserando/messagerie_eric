@@ -56,15 +56,18 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
-  // AUTO-MARK AS READ: Marque automatiquement le message comme lu dès qu'il devient sélectionné
+  // AUTO-MARK AS READ: Marque automatiquement comme lu lors de la sélection avec temporisation
   useEffect(() => {
     if (!selectedMessageId) return;
 
     const currentMsg = messages.find((m) => m.id === selectedMessageId);
     if (currentMsg && currentMsg.is_read === false) {
-      markAsRead(selectedMessageId);
+      const timer = setTimeout(() => {
+        markAsRead(selectedMessageId);
+      }, 500); // Délai évitant le conflit instantané au clic sur "Marquer non lu"
+      return () => clearTimeout(timer);
     }
-  }, [selectedMessageId]); // Retrait de 'messages' pour éviter les ré-exécutions inutiles
+  }, [selectedMessageId]);
 
   const fetchMessages = async () => {
     setLoading(true);
@@ -465,6 +468,7 @@ export default function App() {
               onSelectMessage={handleSelectMessage}
               onDeleteMessage={handleDeleteMessage}
               onToggleHideMessage={handleToggleHideMessage}
+              onToggleReadMessage={handleToggleReadMessage}
             />
 
             <MessageDetail
