@@ -110,7 +110,7 @@ export default function App() {
     const rawContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
     setInitialComposeData({
       destinataire: msg.expediteur || msg.destinataire,
-      objet: msg.objet.startsWith('Re:') ? msg.objet : `Re: ${msg.objet}`,
+      objet: msg.objet?.startsWith('Re:') ? msg.objet : `Re: ${msg.objet || ''}`,
       message: `\n\n--- Message original de ${msg.expediteur || 'inconnu'} ---\n${rawContent}`,
     });
     setIsComposeOpen(true);
@@ -120,7 +120,7 @@ export default function App() {
     const rawContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
     setInitialComposeData({
       destinataire: '',
-      objet: msg.objet.startsWith('Fwd:') || msg.objet.startsWith('Tr:') ? msg.objet : `Fwd: ${msg.objet}`,
+      objet: msg.objet?.startsWith('Fwd:') || msg.objet?.startsWith('Tr:') ? msg.objet : `Fwd: ${msg.objet || ''}`,
       message: `\n\n-------- Message transféré --------\nDe : ${msg.expediteur}\nÀ : ${msg.destinataire}\nObjet : ${msg.objet}\n\n${rawContent}`,
     });
     setIsComposeOpen(true);
@@ -265,7 +265,7 @@ export default function App() {
           if (!msg.masque) return false;
         } else {
           if (msg.masque) return false;
-          if (selectedFolderId !== 'tous' && msg.dossier.toLowerCase() !== selectedFolderId) {
+          if (selectedFolderId !== 'tous' && (msg.dossier || '').toLowerCase() !== selectedFolderId.toLowerCase()) {
             return false;
           }
         }
@@ -299,19 +299,36 @@ export default function App() {
         return false;
       }
 
-      if (filters.dateDebut && new Date(msg.date) < new Date(filters.dateDebut)) {
-        return false;
+      if (filters.dateDebut) {
+        const startDate = new Date(filters.dateDebut);
+        if (!isNaN(startDate.getTime()) && new Date(msg.date) < startDate) return false;
       }
 
       if (filters.dateFin) {
         const endDate = new Date(filters.dateFin);
-        endDate.setHours(23, 59, 59, 999);
-        if (new Date(msg.date) > endDate) return false;
+        if (!isNaN(endDate.getTime())) {
+          endDate.setHours(23, 59, 59, 999);
+          if (new Date(msg.date) > endDate) return false;
+        }
       }
 
       return true;
     });
   }, [messages, selectedFolderId, searchTerm, filters]);
+
+  const handleFolderSelect = (folderId: string) => {
+    setSelectedFolderId(folderId);
+    // On sélectionne automatiquement le premier message visible correspondant au nouveau dossier
+    const nextFolderMessages = messages.filter((msg) => {
+      if (folderId === 'corbeille') return msg.is_deleted;
+      if (msg.is_deleted) return false;
+      if (folderId === 'masques') return msg.masque;
+      if (msg.masque) return false;
+      if (folderId === 'tous') return true;
+      return (msg.dossier || '').toLowerCase() === folderId.toLowerCase();
+    });
+    setSelectedMessageId(nextFolderMessages.length > 0 ? nextFolderMessages[0].id : null);
+  };
 
   const selectedMessage = messages.find((m) => m.id === selectedMessageId) || null;
 
@@ -325,18 +342,7 @@ export default function App() {
         <Sidebar
           messages={messages}
           selectedFolderId={selectedFolderId}
-          onSelectFolder={(folderId) => {
-            setSelectedFolderId(folderId);
-            const filtered = messages.filter((msg) => {
-              if (folderId === 'corbeille') return msg.is_deleted === true;
-              if (msg.is_deleted) return false;
-              if (folderId === 'masques') return msg.masque === true;
-              if (msg.masque) return false;
-              if (folderId === 'tous') return true;
-              return msg.dossier.toLowerCase() === folderId;
-            });
-            setSelectedMessageId(filtered.length > 0 ? filtered[0].id : null);
-          }}
+          onSelectFolder={handleFolderSelect}
           onNewMessageClick={handleOpenNewMessage}
           onLogout={handleLogout}
         />

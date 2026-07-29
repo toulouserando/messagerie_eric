@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Message } from '../types';
 import { Search, Mail, Trash2, Eye, EyeOff, Printer, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,7 +13,7 @@ interface MessageListProps {
 }
 
 export default function MessageList({
-  messages,
+  messages = [],
   selectedFolderId,
   selectedMessageId,
   onSelectMessage,
@@ -22,37 +22,47 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. Filtrer selon le dossier sélectionné et l'état masqué / supprimé
-  const folderFiltered = messages.filter((msg) => {
-    // Si dossier masqués
-    if (selectedFolderId === 'masques') return msg.masque === true || msg.is_visible === false;
-    // Si le message est masqué et qu'on n'est pas dans l'onglet "masques"
-    if (msg.masque || msg.is_visible === false) return false;
-    // Si dossier corbeille
-    if (selectedFolderId === 'corbeille') return msg.is_deleted === true;
-    // Si le message est dans la corbeille et qu'on n'est pas dans l'onglet "corbeille"
-    if (msg.is_deleted) return false;
-    // Si dossier "tous"
-    if (selectedFolderId === 'tous') return true;
-    
-    return msg.dossier.toLowerCase() === selectedFolderId;
-  });
+  // Utilisation de useMemo pour optimiser les performances de filtrage
+  const finalFiltered = useMemo(() => {
+    // 1. Filtrage par dossier / statut (Masqué / Corbeille)
+    const folderFiltered = messages.filter((msg) => {
+      const isHidden = msg.masque === true || msg.is_visible === false;
+      const isDeleted = msg.is_deleted === true;
 
-  // 2. Recherche par mot-clé (dans l'expéditeur, le destinataire, l'objet et le texte brut)
-  const finalFiltered = folderFiltered.filter((msg) => {
-    const query = searchQuery.toLowerCase();
-    const rawContent = (msg.message || '').toLowerCase();
-    return (
-      (msg.objet || '').toLowerCase().includes(query) ||
-      (msg.destinataire || '').toLowerCase().includes(query) ||
-      (msg.expediteur || '').toLowerCase().includes(query) ||
-      rawContent.includes(query)
-    );
-  });
+      // Vues spéciales
+      if (selectedFolderId === 'masques') return isHidden;
+      if (selectedFolderId === 'corbeille') return isDeleted;
+
+      // Exclure les masqués et supprimés des autres dossiers (y compris "tous")
+      if (isHidden || isDeleted) return false;
+
+      // Vue "tous" les messages (actifs)
+      if (selectedFolderId === 'tous') return true;
+
+      // Filtrage par nom de dossier
+      return (msg.dossier || '').toLowerCase() === selectedFolderId.toLowerCase();
+    });
+
+    // 2. Recherche par mot-clé
+    if (!searchQuery.trim()) return folderFiltered;
+
+    const query = searchQuery.toLowerCase().trim();
+    return folderFiltered.filter((msg) => {
+      const rawContent = (msg.message || '').toLowerCase();
+      return (
+        (msg.objet || '').toLowerCase().includes(query) ||
+        (msg.destinataire || '').toLowerCase().includes(query) ||
+        (msg.expediteur || '').toLowerCase().includes(query) ||
+        rawContent.includes(query)
+      );
+    });
+  }, [messages, selectedFolderId, searchQuery]);
 
   const formatDate = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      
       return d.toLocaleDateString('fr-FR', {
         day: 'numeric',
         month: 'short',
@@ -68,13 +78,12 @@ export default function MessageList({
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
 
-    // Récupération du texte brut ou nettoyage léger si seul le HTML existe
     const textContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
 
     const content = `==================================================
 EXPÉDITEUR   : ${msg.expediteur || 'Inconnu'}
 DESTINATAIRE : ${msg.destinataire || 'Inconnu'}
-DATE         : ${new Date(msg.date).toLocaleString('fr-FR')}
+DATE         : ${formatDate(msg.date)}
 DOSSIER      : ${msg.dossier || 'Général'}
 OBJET        : ${msg.objet || '(Sans objet)'}
 ==================================================
@@ -134,6 +143,7 @@ ${textContent}
           <AnimatePresence initial={false}>
             {finalFiltered.map((msg) => {
               const isSelected = selectedMessageId === msg.id;
+              const isHidden = msg.masque === true || msg.is_visible === false;
 
               return (
                 <motion.div
@@ -153,7 +163,7 @@ ${textContent}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <span className="text-xs font-semibold text-gray-800 truncate">
-                      À : {msg.destinataire}
+                      À : {msg.destinataire || 'Non spécifié'}
                     </span>
                     <span className="text-[10px] text-gray-400 font-medium shrink-0 font-mono">
                       {formatDate(msg.date)}
@@ -176,11 +186,11 @@ ${textContent}
                         ? 'bg-amber-50 text-amber-700 border border-amber-100/50'
                         : 'bg-purple-50 text-purple-700 border border-purple-100/50'
                     }`}>
-                      {msg.dossier}
+                      {msg.dossier || 'Général'}
                     </span>
 
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      {/* BOUTON TÉLÉCHARGER */}
+                      {/* TÉLÉCHARGER */}
                       <button
                         onClick={(e) => handleDownloadSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
@@ -189,7 +199,7 @@ ${textContent}
                         <Download className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* BOUTON IMPRIMER */}
+                      {/* IMPRIMER */}
                       <button
                         onClick={(e) => handlePrintSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
@@ -198,21 +208,21 @@ ${textContent}
                         <Printer className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* BOUTON MASQUER / RÉAFFICHER */}
+                      {/* MASQUER / RÉAFFICHER */}
                       {onToggleHideMessage && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onToggleHideMessage(msg.id, !!msg.masque);
+                            onToggleHideMessage(msg.id, isHidden);
                           }}
                           className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                          title={msg.masque ? 'Réafficher le message' : 'Masquer le message'}
+                          title={isHidden ? 'Réafficher le message' : 'Masquer le message'}
                         >
-                          {msg.masque ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                         </button>
                       )}
 
-                      {/* BOUTON SUPPRIMER */}
+                      {/* SUPPRIMER */}
                       <button
                         id={`btn-delete-${msg.id}`}
                         onClick={(e) => {
