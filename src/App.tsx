@@ -58,13 +58,13 @@ export default function App() {
 
   // AUTO-MARK AS READ: Marque automatiquement le message comme lu dès qu'il devient sélectionné
   useEffect(() => {
-    if (selectedMessageId) {
-      const currentMsg = messages.find((m) => m.id === selectedMessageId);
-      if (currentMsg && !currentMsg.is_read) {
-        markAsRead(selectedMessageId);
-      }
+    if (!selectedMessageId) return;
+
+    const currentMsg = messages.find((m) => m.id === selectedMessageId);
+    if (currentMsg && currentMsg.is_read === false) {
+      markAsRead(selectedMessageId);
     }
-  }, [selectedMessageId, messages]);
+  }, [selectedMessageId]); // Retrait de 'messages' pour éviter les ré-exécutions inutiles
 
   const fetchMessages = async () => {
     setLoading(true);
@@ -148,28 +148,29 @@ export default function App() {
   };
 
   const markAsRead = async (id: string) => {
-    const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', id);
-    if (error) {
-      console.error('Erreur mise à jour statut lu :', error.message);
-      return;
-    }
+    // 1. Mise à jour immédiate côté interface
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, is_read: true } : m))
     );
+
+    // 2. Persistance dans la base de données
+    const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', id);
+    if (error) {
+      console.error('Erreur mise à jour statut lu :', error.message);
+    }
   };
 
   const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
     const newReadStatus = !currentReadStatus;
 
-    const { error } = await supabase.from('messages').update({ is_read: newReadStatus }).eq('id', id);
-    if (error) {
-      console.error('Erreur mise à jour statut lu/non lu :', error.message);
-      return;
-    }
-
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, is_read: newReadStatus } : m))
     );
+
+    const { error } = await supabase.from('messages').update({ is_read: newReadStatus }).eq('id', id);
+    if (error) {
+      console.error('Erreur mise à jour statut lu/non lu :', error.message);
+    }
   };
 
   const handleSelectMessage = (msg: Message) => {
@@ -344,7 +345,7 @@ export default function App() {
 
   const handleFolderSelect = (folderId: string) => {
     setSelectedFolderId(folderId);
-    
+
     const nextFolderMessages = messages.filter((msg) => {
       if (folderId === 'corbeille') return msg.is_deleted;
       if (msg.is_deleted) return false;
@@ -457,18 +458,14 @@ export default function App() {
           />
         ) : (
           <div className="flex-1 flex h-full overflow-hidden print:hidden">
-            <div className="flex flex-col border-r border-gray-200 w-80 lg:w-96 shrink-0 h-full">
-              <SearchBar onSearch={handleSearchChange} />
-
-              <MessageList
-                messages={filteredMessages}
-                selectedFolderId={selectedFolderId}
-                selectedMessageId={selectedMessageId}
-                onSelectMessage={handleSelectMessage}
-                onDeleteMessage={handleDeleteMessage}
-                onToggleHideMessage={handleToggleHideMessage}
-              />
-            </div>
+            <MessageList
+              messages={filteredMessages}
+              selectedFolderId={selectedFolderId}
+              selectedMessageId={selectedMessageId}
+              onSelectMessage={handleSelectMessage}
+              onDeleteMessage={handleDeleteMessage}
+              onToggleHideMessage={handleToggleHideMessage}
+            />
 
             <MessageDetail
               message={selectedMessage}
