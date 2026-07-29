@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
+import './App.css';
 import { Message } from './types';
 import LoginScreen from './components/LoginScreen';
 import Sidebar from './components/Sidebar';
@@ -85,7 +86,6 @@ export default function App() {
       if (visible.length > 0 && !selectedMessageId) {
         const firstMsg = visible[0];
         setSelectedMessageId(firstMsg.id);
-        // S'il est non lu à l'ouverture, on le marque automatiquement comme lu
         if (!firstMsg.is_read) {
           markAsRead(firstMsg.id);
         }
@@ -141,7 +141,6 @@ export default function App() {
     );
   };
 
-  // MARQUAGE FORCE EN "LU"
   const markAsRead = async (id: string) => {
     const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', id);
     if (error) {
@@ -153,7 +152,6 @@ export default function App() {
     );
   };
 
-  // BASCULE MANUELLE LU / NON LU (Bouton dans MessageDetail)
   const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
     const newReadStatus = !currentReadStatus;
 
@@ -168,7 +166,6 @@ export default function App() {
     );
   };
 
-  // SELECTION D'UN MESSAGE (AVEC MARQUAGE AUTOMATIQUE EN LU)
   const handleSelectMessage = (msg: Message) => {
     setSelectedMessageId(msg.id);
     if (!msg.is_read) {
@@ -212,7 +209,7 @@ export default function App() {
         date: inserted.created_at,
         masque: false,
         is_deleted: false,
-        is_read: true, // Un message envoyé par soi-même est déjà "lu"
+        is_read: true,
       };
 
       setMessages((prev) => [newMsg, ...prev]);

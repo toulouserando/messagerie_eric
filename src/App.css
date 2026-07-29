@@ -1,0 +1,14 @@
+@media print {
+  html, body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* Empêche de couper un message au milieu entre deux pages A4 */
+  article {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
