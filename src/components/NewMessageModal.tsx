@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion'; // Changé 'motion/react' par 'framer-motion'
+import { motion } from 'framer-motion';
 import { X, Send, User, Tag, AlertCircle } from 'lucide-react';
 import { Message } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface NewMessageModalProps {
   isOpen: boolean;
@@ -20,15 +21,34 @@ export default function NewMessageModal({
   onSendMessage,
   initialData = {},
 }: NewMessageModalProps) {
-  const MY_EMAIL = 'ericgalaxy5@free.fr';
+  // Récupération dynamique depuis la variable d'environnement Vite
+  const MY_EMAIL = import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online';
 
   const [destinataire, setDestinataire] = useState('');
   const [objet, setObjet] = useState('');
   const [message, setMessage] = useState('');
   const [computedFolder, setComputedFolder] = useState('Divers');
 
+  // Liste des suggestions de contacts depuis Supabase
+  const [contactSuggestions, setContactSuggestions] = useState<string[]>([]);
+
   // État pour gérer les avertissements/erreurs
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Chargement dynamique des contacts enregistrés dans Supabase
+  useEffect(() => {
+    const fetchContacts = async () => {
+      const { data, error } = await supabase.from('contacts').select('email');
+      if (!error && data) {
+        const emails = data.map((c) => c.email).filter(Boolean);
+        setContactSuggestions(Array.from(new Set(emails)));
+      }
+    };
+
+    if (isOpen) {
+      fetchContacts();
+    }
+  }, [isOpen]);
 
   // Extrait le premier mot de l'objet pour en faire le nom du dossier
   const extractFolder = (subject: string): string => {
@@ -59,7 +79,7 @@ export default function NewMessageModal({
     e.preventDefault();
     setErrorMessage(null);
 
-    // --- CONTROLES DE VALIDATION ---
+    // --- CONTRÔLES DE VALIDATION ---
     if (!destinataire.trim()) {
       setErrorMessage('Veuillez indiquer un destinataire.');
       return;
@@ -143,7 +163,7 @@ export default function NewMessageModal({
               <label htmlFor="input-destinataire" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
                 Destinataire <span className="text-red-500">*</span>
               </label>
-              
+
               {/* Bouton raccourci pour s'envoyer à soi-même */}
               <button
                 type="button"
@@ -174,10 +194,12 @@ export default function NewMessageModal({
                 className="block w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
               />
 
-              {/* Suggestions automatiques */}
+              {/* Suggestions automatiques dynamiques issues de Supabase */}
               <datalist id="contacts-list">
                 <option value={MY_EMAIL} />
-                <option value="contact@exemple.com" />
+                {contactSuggestions.map((email) => (
+                  <option key={email} value={email} />
+                ))}
               </datalist>
             </div>
           </div>

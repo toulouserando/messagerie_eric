@@ -22,21 +22,31 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. Filtrer selon le dossier sélectionné et l'état masqué
+  // 1. Filtrer selon le dossier sélectionné et l'état masqué / supprimé
   const folderFiltered = messages.filter((msg) => {
-    if (selectedFolderId === 'masques') return msg.masque === true;
-    if (msg.masque) return false;
+    // Si dossier masqués
+    if (selectedFolderId === 'masques') return msg.masque === true || msg.is_visible === false;
+    // Si le message est masqué et qu'on n'est pas dans l'onglet "masques"
+    if (msg.masque || msg.is_visible === false) return false;
+    // Si dossier corbeille
+    if (selectedFolderId === 'corbeille') return msg.is_deleted === true;
+    // Si le message est dans la corbeille et qu'on n'est pas dans l'onglet "corbeille"
+    if (msg.is_deleted) return false;
+    // Si dossier "tous"
     if (selectedFolderId === 'tous') return true;
+    
     return msg.dossier.toLowerCase() === selectedFolderId;
   });
 
-  // 2. Recherche par mot-clé
+  // 2. Recherche par mot-clé (dans l'expéditeur, le destinataire, l'objet et le texte brut)
   const finalFiltered = folderFiltered.filter((msg) => {
     const query = searchQuery.toLowerCase();
+    const rawContent = (msg.message || '').toLowerCase();
     return (
-      msg.objet.toLowerCase().includes(query) ||
-      msg.destinataire.toLowerCase().includes(query) ||
-      msg.message.toLowerCase().includes(query)
+      (msg.objet || '').toLowerCase().includes(query) ||
+      (msg.destinataire || '').toLowerCase().includes(query) ||
+      (msg.expediteur || '').toLowerCase().includes(query) ||
+      rawContent.includes(query)
     );
   });
 
@@ -57,6 +67,10 @@ export default function MessageList({
   // TÉLÉCHARGER UN MESSAGE INDIVIDUEL (.txt)
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
+
+    // Récupération du texte brut ou nettoyage léger si seul le HTML existe
+    const textContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
+
     const content = `==================================================
 EXPÉDITEUR   : ${msg.expediteur || 'Inconnu'}
 DESTINATAIRE : ${msg.destinataire || 'Inconnu'}
@@ -65,7 +79,7 @@ DOSSIER      : ${msg.dossier || 'Général'}
 OBJET        : ${msg.objet || '(Sans objet)'}
 ==================================================
 
-${msg.message}
+${textContent}
 `;
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -100,7 +114,7 @@ ${msg.message}
             placeholder="Rechercher un message..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-500 focus:bg-white transition-all text-gray-900 placeholder:text-gray-400"
+            className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 focus:bg-white transition-all text-gray-900 placeholder:text-gray-400"
           />
         </div>
       </div>
@@ -151,7 +165,7 @@ ${msg.message}
                   </h4>
 
                   <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-3">
-                    {msg.message}
+                    {msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
                   </p>
 
                   <div className="flex items-center justify-between">

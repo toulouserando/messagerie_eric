@@ -70,11 +70,13 @@ export default function App() {
         expediteur: item.sender_email,
         destinataire: item.recipient_email,
         objet: item.subject || '',
-        message: item.body,
+        message: item.body || '',
+        messageHtml: item.body_html || item.message_html || undefined,
         dossier: item.theme || 'Général',
         date: item.created_at,
         masque: item.is_archived || false,
         is_deleted: item.is_deleted || false,
+        is_read: item.is_read || false,
       }));
 
       setMessages(formattedMessages);
@@ -105,19 +107,21 @@ export default function App() {
   };
 
   const handleReplyMessage = (msg: Message) => {
+    const rawContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
     setInitialComposeData({
       destinataire: msg.expediteur || msg.destinataire,
       objet: msg.objet.startsWith('Re:') ? msg.objet : `Re: ${msg.objet}`,
-      message: `\n\n--- Message original de ${msg.expediteur || 'inconnu'} ---\n${msg.message}`,
+      message: `\n\n--- Message original de ${msg.expediteur || 'inconnu'} ---\n${rawContent}`,
     });
     setIsComposeOpen(true);
   };
 
   const handleForwardMessage = (msg: Message) => {
+    const rawContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
     setInitialComposeData({
       destinataire: '',
       objet: msg.objet.startsWith('Fwd:') || msg.objet.startsWith('Tr:') ? msg.objet : `Fwd: ${msg.objet}`,
-      message: `\n\n-------- Message transféré --------\nDe : ${msg.expediteur}\nÀ : ${msg.destinataire}\nObjet : ${msg.objet}\n\n${msg.message}`,
+      message: `\n\n-------- Message transféré --------\nDe : ${msg.expediteur}\nÀ : ${msg.destinataire}\nObjet : ${msg.objet}\n\n${rawContent}`,
     });
     setIsComposeOpen(true);
   };
@@ -132,9 +136,23 @@ export default function App() {
     );
   };
 
+  const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
+    const newReadStatus = !currentReadStatus;
+
+    const { error } = await supabase.from('messages').update({ is_read: newReadStatus }).eq('id', id);
+    if (error) {
+      console.error('Erreur mise à jour statut lu/non lu :', error.message);
+      return;
+    }
+
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, is_read: newReadStatus } : m))
+    );
+  };
+
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
     const payload = {
-      sender_email: 'ericgalaxy5@free.fr',
+      sender_email: import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online',
       recipient_email: newMsgData.destinataire,
       subject: newMsgData.objet,
       body: newMsgData.message,
@@ -148,6 +166,15 @@ export default function App() {
     }
 
     if (data && data[0]) {
+      const { error: contactError } = await supabase.from('contacts').upsert(
+        { email: newMsgData.destinataire },
+        { onConflict: 'email' }
+      );
+
+      if (contactError) {
+        console.error("Erreur lors de l'ajout du contact :", contactError.message);
+      }
+
       const inserted = data[0];
       const newMsg: Message = {
         id: inserted.id,
@@ -159,6 +186,7 @@ export default function App() {
         date: inserted.created_at,
         masque: false,
         is_deleted: false,
+        is_read: false,
       };
 
       setMessages((prev) => [newMsg, ...prev]);
@@ -167,7 +195,6 @@ export default function App() {
     }
   };
 
-  // GESTION DE LA SUPPRESSION / CORBEILLE
   const handleDeleteMessage = async (id: string) => {
     const targetMsg = messages.find((m) => m.id === id);
 
@@ -194,7 +221,6 @@ export default function App() {
     }
   };
 
-  // RESTAURER UN MESSAGE DE LA CORBEILLE
   const handleRestoreMessage = async (id: string) => {
     const { error } = await supabase.from('messages').update({ is_deleted: false }).eq('id', id);
     if (error) {
@@ -211,7 +237,6 @@ export default function App() {
     }
   };
 
-  // VIDER TOUTE LA CORBEILLE
   const handleEmptyTrash = async () => {
     const { error } = await supabase.from('messages').delete().eq('is_deleted', true);
 
@@ -224,7 +249,6 @@ export default function App() {
     setSelectedMessageId(null);
   };
 
-  // RECHERCHE ET FILTRAGE MULTI-CRITÈRES
   const handleSearchChange = (query: string, newFilters: AdvancedFilters) => {
     setSearchTerm(query);
     setFilters(newFilters);
@@ -297,7 +321,6 @@ export default function App() {
 
   return (
     <div id="app-workspace" className="flex h-screen w-full bg-white overflow-hidden text-gray-800 font-sans selection:bg-gray-100 print:h-auto print:overflow-visible">
-      {/* BARRE LATÉRALE - Masquée à l'impression */}
       <div className="print:hidden">
         <Sidebar
           messages={messages}
@@ -320,7 +343,6 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex flex-col h-full overflow-hidden print:h-auto print:overflow-visible">
-        {/* BARRE DE SÉLECTION DU MODE DE VUE ET D'IMPRESSION - Masquée à l'impression */}
         <div className="bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center gap-1 bg-gray-200/80 p-1 rounded-lg">
             <button
@@ -348,7 +370,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* BOUTONS D'IMPRESSION DU DOSSIER EN COURS */}
             <button
               onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-md text-xs font-semibold transition-all cursor-pointer"
@@ -367,7 +388,6 @@ export default function App() {
               <span>PDF</span>
             </button>
 
-            {/* BOUTON VIDER LA CORBEILLE */}
             {selectedFolderId === 'corbeille' ? (
               <button
                 onClick={handleEmptyTrash}
@@ -384,7 +404,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* CONTENU PRINCIPAL (ÉCRAN) */}
         {loading ? (
           <div className="flex-1 flex items-center justify-center text-gray-500 text-xs font-medium print:hidden">
             Chargement de la messagerie...
@@ -403,6 +422,7 @@ export default function App() {
           <div className="flex-1 flex h-full overflow-hidden print:hidden">
             <div className="flex flex-col border-r border-gray-200 w-80 lg:w-96 shrink-0 h-full">
               <SearchBar onSearch={handleSearchChange} />
+
               <MessageList
                 messages={filteredMessages}
                 selectedFolderId={selectedFolderId}
@@ -420,11 +440,11 @@ export default function App() {
               onReplyMessage={handleReplyMessage}
               onForwardMessage={handleForwardMessage}
               onToggleHideMessage={handleToggleHideMessage}
+              onToggleReadMessage={handleToggleReadMessage}
             />
           </div>
         )}
 
-        {/* GABARIT EXCLUSIF POUR L'IMPRESSION DE LA BOÎTE DE RÉCEPTION */}
         {viewMode === 'messagerie' && (
           <div className="hidden print:block p-4 bg-white text-black font-sans">
             <div className="border-b-2 border-black pb-3 mb-4">
@@ -449,9 +469,16 @@ export default function App() {
                     <div className="text-xs font-semibold mb-1">
                       À : {msg.destinataire || 'Inconnu'} | Objet : {msg.objet || '(Sans objet)'}
                     </div>
-                    <div className="text-xs pl-2 border-l-2 border-gray-400 whitespace-pre-wrap leading-snug">
-                      {msg.message}
-                    </div>
+                    {msg.messageHtml ? (
+                      <div
+                        className="text-xs pl-2 border-l-2 border-gray-400 leading-snug prose prose-xs"
+                        dangerouslySetInnerHTML={{ __html: msg.messageHtml }}
+                      />
+                    ) : (
+                      <div className="text-xs pl-2 border-l-2 border-gray-400 whitespace-pre-wrap leading-snug">
+                        {msg.message}
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
@@ -460,7 +487,6 @@ export default function App() {
         )}
       </div>
 
-      {/* MODAL NOUVEAU MESSAGE */}
       <AnimatePresence>
         {isComposeOpen && (
           <NewMessageModal

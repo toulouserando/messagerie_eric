@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { Message } from '../types';
 import { 
   Mail, Calendar, User, Folder, Trash2, ShieldCheck, 
-  Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle, RotateCcw, Download, Printer 
+  Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle, RotateCcw, Download, Printer,
+  MailOpen, MailCheck 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import DOMPurify from 'dompurify';
 
 interface MessageDetailProps {
   message: Message | null;
@@ -13,6 +15,7 @@ interface MessageDetailProps {
   onReplyMessage?: (message: Message) => void;
   onForwardMessage?: (message: Message) => void;
   onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
+  onToggleReadMessage?: (id: string, currentReadStatus: boolean) => void;
 }
 
 export default function MessageDetail({
@@ -22,6 +25,7 @@ export default function MessageDetail({
   onReplyMessage,
   onForwardMessage,
   onToggleHideMessage,
+  onToggleReadMessage,
 }: MessageDetailProps) {
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -66,7 +70,8 @@ export default function MessageDetail({
   };
 
   const handleCopyText = () => {
-    navigator.clipboard.writeText(message.message);
+    const textToCopy = message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
+    navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -80,7 +85,7 @@ DOSSIER      : ${message.dossier || 'Général'}
 OBJET        : ${message.objet || '(Sans objet)'}
 ==================================================
 
-${message.message}
+${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
 `;
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -96,6 +101,8 @@ ${message.message}
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+
+  const sanitizedHtml = message.messageHtml ? DOMPurify.sanitize(message.messageHtml) : null;
 
   return (
     <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden relative print:overflow-visible">
@@ -177,6 +184,28 @@ ${message.message}
                 <Download className="w-3.5 h-3.5" />
                 <span>Télécharger</span>
               </button>
+
+              {/* BOUTON MARQUER COMME LU / NON LU */}
+              {onToggleReadMessage && (
+                <button
+                  id="btn-toggle-read-detail"
+                  onClick={() => onToggleReadMessage(message.id, !!message.is_read)}
+                  title={message.is_read ? 'Marquer le message comme non lu' : 'Marquer le message comme lu'}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                >
+                  {message.is_read ? (
+                    <>
+                      <Mail className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Marquer non lu</span>
+                    </>
+                  ) : (
+                    <>
+                      <MailOpen className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Marquer lu</span>
+                    </>
+                  )}
+                </button>
+              )}
 
               {onToggleHideMessage && (
                 <button
@@ -272,10 +301,18 @@ ${message.message}
               <span>{copied ? 'Copié !' : 'Copier le texte'}</span>
             </button>
           </div>
+
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs print:border-none print:p-0 print:shadow-none">
-            <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-sans print:text-xs">
-              {message.message}
-            </p>
+            {sanitizedHtml ? (
+              <div
+                className="prose max-w-none text-sm text-gray-800 font-sans print:text-xs overflow-x-auto"
+                dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+              />
+            ) : (
+              <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-sans print:text-xs">
+                {message.message}
+              </p>
+            )}
           </div>
         </div>
       </div>
