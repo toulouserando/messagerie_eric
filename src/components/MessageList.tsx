@@ -134,7 +134,7 @@ ${textContent}
             {finalFiltered.map((msg) => {
               const isSelected = selectedMessageId === msg.id;
               const isHidden = msg.masque === true || msg.is_visible === false;
-              const isUnread = !msg.is_read; // VÉRIFICATION STATUT LECTURE
+              const isUnread = !msg.is_read;
 
               return (
                 <motion.div
@@ -156,10 +156,14 @@ ${textContent}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
-                      {/* PASTILLE BLEUE SI NON LU */}
-                      {isUnread && (
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0 animate-pulse" title="Message non lu" />
-                      )}
+                      {/* PASTILLE DYNAMIQUE : BLEUE SI NON LU, GRIS DISCRET SI LU */}
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-300 ${
+                          isUnread ? 'bg-blue-600 animate-pulse' : 'bg-gray-300/80'
+                        }`}
+                        title={isUnread ? 'Message non lu' : 'Message lu'}
+                      />
+
                       <span className={`text-xs truncate ${isUnread ? 'font-bold text-gray-950' : 'font-semibold text-gray-700'}`}>
                         À : {msg.destinataire || 'Non spécifié'}
                       </span>
