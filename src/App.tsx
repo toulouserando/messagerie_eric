@@ -56,6 +56,16 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
+  // AUTO-MARK AS READ: Marque automatiquement le message comme lu dès qu'il devient sélectionné
+  useEffect(() => {
+    if (selectedMessageId) {
+      const currentMsg = messages.find((m) => m.id === selectedMessageId);
+      if (currentMsg && !currentMsg.is_read) {
+        markAsRead(selectedMessageId);
+      }
+    }
+  }, [selectedMessageId, messages]);
+
   const fetchMessages = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -84,11 +94,7 @@ export default function App() {
 
       const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
       if (visible.length > 0 && !selectedMessageId) {
-        const firstMsg = visible[0];
-        setSelectedMessageId(firstMsg.id);
-        if (!firstMsg.is_read) {
-          markAsRead(firstMsg.id);
-        }
+        setSelectedMessageId(visible[0].id);
       }
     }
     setLoading(false);
@@ -168,9 +174,6 @@ export default function App() {
 
   const handleSelectMessage = (msg: Message) => {
     setSelectedMessageId(msg.id);
-    if (!msg.is_read) {
-      markAsRead(msg.id);
-    }
   };
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
@@ -352,11 +355,7 @@ export default function App() {
     });
 
     if (nextFolderMessages.length > 0) {
-      const firstMsg = nextFolderMessages[0];
-      setSelectedMessageId(firstMsg.id);
-      if (!firstMsg.is_read) {
-        markAsRead(firstMsg.id);
-      }
+      setSelectedMessageId(nextFolderMessages[0].id);
     } else {
       setSelectedMessageId(null);
     }
