@@ -67,7 +67,7 @@ export default function App() {
       }, 500); // Délai évitant le conflit instantané au clic sur "Marquer non lu"
       return () => clearTimeout(timer);
     }
-  }, [selectedMessageId]);
+  }, [selectedMessageId, messages]);
 
   const fetchMessages = async () => {
     setLoading(true);
@@ -384,6 +384,12 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex flex-col h-full overflow-hidden print:h-auto print:overflow-visible">
+        {/* BARRE DE RECHERCHE */}
+        <div className="print:hidden border-b border-gray-200">
+          <SearchBar onSearchChange={handleSearchChange} />
+        </div>
+
+        {/* BARRE D'OUTILS ET COMMUTATEUR DE VUE */}
         <div className="bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center gap-1 bg-gray-200/80 p-1 rounded-lg">
             <button
