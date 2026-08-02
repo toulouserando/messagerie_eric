@@ -24,7 +24,6 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Adresses e-mails reconnues pour l'envoi
   const MY_EMAILS = [
     (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
     'ericgalaxy5@free.fr',
@@ -49,15 +48,12 @@ export default function MessageList({
       // 3. Messages envoyés
       if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') return isSentByMe;
 
-      // EXCLUSION : Tous les autres dossiers (y compris "Tous les messages") n'affichent QUE les messages reçus
-      if (isSentByMe) return false;
-
-      // 4. Dossier Tous les messages
+      // 4. Tous les messages (affiche la totalité des e-mails actifs)
       if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
         return true;
       }
 
-      // 5. Dossiers thématiques (ex: Général, Sherpa, Home, etc.)
+      // 5. Filtrage par dossier thématique (ex: Général, Sherpa, Home, etc.)
       const currentFolder = (msg.dossier || 'Général').trim().toLowerCase();
       return currentFolder === folderKey;
     });
@@ -130,7 +126,6 @@ ${textContent}
 
   return (
     <div id="message-list-container" className="w-96 border-r border-gray-200 bg-gray-50/30 flex flex-col h-full shrink-0">
-      {/* Barre de recherche */}
       <div className="p-4 bg-white border-b border-gray-200 space-y-3">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 stroke-[1.75]" />
@@ -145,7 +140,6 @@ ${textContent}
         </div>
       </div>
 
-      {/* Liste des messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {finalFiltered.length === 0 ? (
           <div className="text-center py-12 px-4">
