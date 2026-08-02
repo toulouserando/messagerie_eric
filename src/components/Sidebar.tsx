@@ -16,7 +16,7 @@ export default function Sidebar({
   onNewMessageClick,
   onLogout,
 }: SidebarProps) {
-  // Vos adresses expéditeur reconnues
+  // Vos adresses expéditeur connues
   const MY_EMAILS = [
     (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
     'ericgalaxy5@free.fr',
@@ -35,47 +35,43 @@ export default function Sidebar({
   const hiddenMessages = activeMessages.filter((m) => m.masque);
   const visibleMessages = activeMessages.filter((m) => !m.masque);
 
-  // 3. Séparation des envoyés vs reçus parmi les visibles
+  // 3. Séparation des envoyés vs reçus
   const sentMessages = visibleMessages.filter((m) => isSentByMe(m));
   const receivedMessages = visibleMessages.filter((m) => !isSentByMe(m));
 
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
-    foldersMap.set('Divers', 0);
 
-    // Compte uniquement les e-mails reçus dans les dossiers thématiques
-    receivedMessages.forEach((msg) => {
-      const folderName = msg.dossier || 'Divers';
+    // Récupération de tous les dossiers thématiques présents dans les messages visibles (Sherpa, Home, Général, etc.)
+    visibleMessages.forEach((msg) => {
+      const folderName = (msg.dossier || 'Général').trim();
       foldersMap.set(folderName, (foldersMap.get(folderName) || 0) + 1);
     });
 
-    const folderList: Folder[] = [];
+    const customFolderList: Folder[] = [];
     foldersMap.forEach((count, name) => {
-      folderList.push({
+      customFolderList.push({
         id: name.toLowerCase(),
         name,
         count,
       });
     });
 
-    folderList.sort((a, b) => {
-      if (a.name === 'Divers') return 1;
-      if (b.name === 'Divers') return -1;
-      return a.name.localeCompare(b.name);
-    });
+    // Tri alphabétique des dossiers personnalisés
+    customFolderList.sort((a, b) => a.name.localeCompare(b.name));
 
     return [
       {
         id: 'tous',
         name: 'Tous les messages',
-        count: receivedMessages.length,
+        count: visibleMessages.length,
       },
       {
         id: 'envoyes',
         name: 'Messages envoyés',
         count: sentMessages.length,
       },
-      ...folderList,
+      ...customFolderList,
       {
         id: 'masques',
         name: 'Messages masqués',
