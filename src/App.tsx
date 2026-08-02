@@ -28,13 +28,13 @@ export default function App() {
   // ÉTAT DE LA VUE : 'messagerie' (classique) ou 'pages' (mode document)
   const [viewMode, setViewMode] = useState<'messagerie' | 'pages'>('messagerie');
 
-  // DOSSIER ACTIF : Reste par défaut sur 'tous'
+  // DOSSIER ACTIF : 'tous' par défaut
   const [selectedFolderId, setSelectedFolderId] = useState<string>('tous');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
 
-  // Email de l'expéditeur principal
-  const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase();
+  // Email de l'expéditeur principal (normalisé)
+  const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
 
   // ÉTATS DE RECHERCHE & FILTRES
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,7 +59,7 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
-  // AUTO-MARK AS READ: Marque automatiquement comme lu lors de la sélection avec temporisation
+  // AUTO-MARK AS READ: Marque automatiquement comme lu lors de la sélection
   useEffect(() => {
     if (!selectedMessageId) return;
 
@@ -84,8 +84,8 @@ export default function App() {
     } else if (data) {
       const formattedMessages: Message[] = data.map((item) => ({
         id: item.id,
-        expediteur: item.sender_email,
-        destinataire: item.recipient_email,
+        expediteur: item.sender_email || '',
+        destinataire: item.recipient_email || '',
         objet: item.subject || '',
         message: item.body || '',
         messageHtml: item.body_html || item.message_html || undefined,
@@ -98,13 +98,10 @@ export default function App() {
 
       setMessages(formattedMessages);
 
-      // Sélectionner le 1er message visible de la boîte de réception (excluant les e-mails envoyés)
-      const visibleInbox = formattedMessages.filter(
-        (m) => !m.masque && !m.is_deleted && (m.expediteur || '').toLowerCase() !== MY_EMAIL
-      );
-
-      if (visibleInbox.length > 0 && !selectedMessageId) {
-        setSelectedMessageId(visibleInbox[0].id);
+      // Sélectionner le 1er message visible (non supprimé et non masqué)
+      const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
+      if (visible.length > 0 && !selectedMessageId) {
+        setSelectedMessageId(visible[0].id);
       }
     }
     setLoading(false);
@@ -187,7 +184,6 @@ export default function App() {
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
     try {
-      // 1. Envoi réel du mail via l'API Resend
       const resendRes = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -203,7 +199,6 @@ export default function App() {
         console.warn("Échec de l'envoi direct via l'API route Resend. Traitement Supabase conservé.");
       }
 
-      // 2. Sauvegarde du message dans la base Supabase
       const payload = {
         sender_email: MY_EMAIL,
         recipient_email: newMsgData.destinataire,
@@ -219,7 +214,6 @@ export default function App() {
         return;
       }
 
-      // 3. Ajout dans contacts_uniques
       const { error: contactError } = await supabase
         .from('contacts_uniques')
         .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
@@ -228,7 +222,6 @@ export default function App() {
         console.error("Erreur lors de l'ajout dans contacts_uniques :", contactError.message);
       }
 
-      // 4. Mise à jour de l'affichage local et redirection automatique vers le dossier "envoyes"
       if (data && data[0]) {
         const inserted = data[0];
         const newMsg: Message = {
@@ -312,39 +305,41 @@ export default function App() {
     setFilters(newFilters);
   };
 
-  // --- LOGIQUE DE FILTRAGE CENTRALE CORRIGÉE ---
+  // --- LOGIQUE DE FILTRAGE DU DOSSIER CORRIGÉE ---
+  const filterByFolder = (msg: Message, folderId: string) => {
+    const folderKey = folderId.toLowerCase().trim();
+    const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
+    const isSentByMe = expediteurClean === MY_EMAIL;
+
+    // 1. CORBEILLE
+    if (folderKey === 'corbeille' || folderKey === 'trash') {
+      return msg.is_deleted;
+    }
+    if (msg.is_deleted) return false;
+
+    // 2. MASQUÉS
+    if (folderKey === 'masques' || folderKey === 'messages masqués' || folderKey === 'archived') {
+      return msg.masque;
+    }
+    if (msg.masque) return false;
+
+    // 3. ENVOYÉS
+    if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') {
+      return isSentByMe;
+    }
+
+    // 4. TOUS LES MESSAGES (REÇUS ET ENVOYÉS VUS GLOBALEMENT)
+    if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
+      return true;
+    }
+
+    // 5. DOSSIERS THÉMATIQUES (Général, Sherpa, Home, etc.)
+    const msgDossierClean = (msg.dossier || 'Général').trim().toLowerCase();
+    return msgDossierClean === folderKey;
+  };
+
   const filteredMessages = useMemo(() => {
-    return messages.filter((msg) => {
-      const isSentByMe = (msg.expediteur || '').toLowerCase() === MY_EMAIL;
-
-      // 1. CORBEILLE
-      if (selectedFolderId === 'corbeille') {
-        return msg.is_deleted;
-      }
-      if (msg.is_deleted) return false;
-
-      // 2. MASQUÉS
-      if (selectedFolderId === 'masques') {
-        return msg.masque;
-      }
-      if (msg.masque) return false;
-
-      // 3. ENVOYÉS
-      if (selectedFolderId === 'envoyes') {
-        return isSentByMe;
-      }
-
-      // POUR TOUTES LES AUTRES VUES (REÇUS) : EXCLURE LES ENVOYÉS
-      if (isSentByMe) return false;
-
-      // 4. TOUS LES MESSAGES (REÇUS)
-      if (selectedFolderId === 'tous' || selectedFolderId === 'tous_les_messages') {
-        return true;
-      }
-
-      // 5. DOSSIERS THÉMATIQUES (Général, Sherpa, etc.)
-      return (msg.dossier || 'Général').toLowerCase() === selectedFolderId.toLowerCase();
-    }).filter((msg) => {
+    return messages.filter((msg) => filterByFolder(msg, selectedFolderId)).filter((msg) => {
       // FILTRES DE RECHERCHE
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
@@ -380,26 +375,11 @@ export default function App() {
     });
   }, [messages, selectedFolderId, searchTerm, filters, MY_EMAIL]);
 
-  // CHANGEMENT DE DOSSIER CORRIGÉ : Sélectionne le bon 1er message du dossier actif
+  // CHANGEMENT DE DOSSIER : Sélectionne le 1er message du dossier actif
   const handleFolderSelect = (folderId: string) => {
     setSelectedFolderId(folderId);
 
-    const nextFolderMessages = messages.filter((msg) => {
-      const isSentByMe = (msg.expediteur || '').toLowerCase() === MY_EMAIL;
-
-      if (folderId === 'corbeille') return msg.is_deleted;
-      if (msg.is_deleted) return false;
-
-      if (folderId === 'masques') return msg.masque;
-      if (msg.masque) return false;
-
-      if (folderId === 'envoyes') return isSentByMe;
-      if (isSentByMe) return false;
-
-      if (folderId === 'tous' || folderId === 'tous_les_messages') return true;
-
-      return (msg.dossier || 'Général').toLowerCase() === folderId.toLowerCase();
-    });
+    const nextFolderMessages = messages.filter((msg) => filterByFolder(msg, folderId));
 
     if (nextFolderMessages.length > 0) {
       setSelectedMessageId(nextFolderMessages[0].id);
@@ -500,7 +480,7 @@ export default function App() {
           </div>
         ) : viewMode === 'pages' ? (
           <KeywordPagesView
-            messages={messages.filter((m) => !m.is_deleted && (m.expediteur || '').toLowerCase() !== MY_EMAIL)}
+            messages={messages.filter((m) => !m.is_deleted)}
             activeKeyword={selectedFolderId}
             onSelectKeyword={(folder) => handleFolderSelect(folder.toLowerCase())}
             onDeleteMessage={handleDeleteMessage}
