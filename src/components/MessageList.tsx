@@ -24,42 +24,40 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Récupération dynamique de l'adresse email depuis les variables d'environnement Vite
-  const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
+  // Adresses e-mails reconnues pour l'envoi
+  const MY_EMAILS = [
+    (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
+    'ericgalaxy5@free.fr',
+  ];
 
   const finalFiltered = useMemo(() => {
     const folderFiltered = messages.filter((msg) => {
       const isHidden = msg.masque === true || msg.is_visible === false;
       const isDeleted = msg.is_deleted === true;
-      const isSentByMe = (msg.expediteur || '').trim().toLowerCase() === MY_EMAIL;
+      const expediteur = (msg.expediteur || '').toLowerCase().trim();
+      const isSentByMe = MY_EMAILS.includes(expediteur);
       const folderKey = selectedFolderId.toLowerCase().trim();
 
-      // 1. Dossier Corbeille
+      // 1. Corbeille
       if (folderKey === 'corbeille' || folderKey === 'trash') return isDeleted;
-
-      // Si le message est supprimé, il ne doit apparaître nulle part ailleurs
       if (isDeleted) return false;
 
-      // 2. Dossier Masqués
+      // 2. Masqués
       if (folderKey === 'masques' || folderKey === 'messages masqués' || folderKey === 'archived') return isHidden;
-
-      // Si le message est masqué, il ne doit pas apparaître dans les dossiers standard
       if (isHidden) return false;
 
-      // 3. Dossier Messages Envoyés
+      // 3. Messages envoyés
       if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') return isSentByMe;
 
-      // 4. Dossier Tous les messages (affiche la boîte générale : reçus et envoyés)
+      // EXCLUSION : Tous les autres dossiers (y compris "Tous les messages") n'affichent QUE les messages reçus
+      if (isSentByMe) return false;
+
+      // 4. Dossier Tous les messages
       if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
         return true;
       }
 
-      // 5. Dossier Boîte de réception pure (si un dossier spécifique "inbox" existe)
-      if (folderKey === 'inbox' || folderKey === 'reception') {
-        return !isSentByMe;
-      }
-
-      // 6. Filtrage par dossier thématique (ex: Général, Sherpa, Divers...)
+      // 5. Dossiers thématiques (ex: Général, Sherpa, Home, etc.)
       const currentFolder = (msg.dossier || 'Général').trim().toLowerCase();
       return currentFolder === folderKey;
     });
@@ -76,7 +74,7 @@ export default function MessageList({
         rawContent.includes(query)
       );
     });
-  }, [messages, selectedFolderId, searchQuery, MY_EMAIL]);
+  }, [messages, selectedFolderId, searchQuery]);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -165,7 +163,8 @@ ${textContent}
               const isSelected = selectedMessageId === msg.id;
               const isHidden = msg.masque === true || msg.is_visible === false;
               const isUnread = !msg.is_read;
-              const isSentFolder = selectedFolderId.toLowerCase() === 'envoyes' || (msg.expediteur || '').toLowerCase() === MY_EMAIL;
+              const expediteur = (msg.expediteur || '').toLowerCase().trim();
+              const isSentFolder = selectedFolderId.toLowerCase() === 'envoyes' || MY_EMAILS.includes(expediteur);
 
               return (
                 <motion.div
@@ -194,7 +193,6 @@ ${textContent}
                         title={isUnread ? 'Message non lu' : 'Message lu'}
                       />
 
-                      {/* Distinction de l'affichage "À :" / "De :" selon si c'est un message envoyé ou reçu */}
                       <span className={`text-xs truncate ${isUnread ? 'font-bold text-gray-950' : 'font-semibold text-gray-700'}`}>
                         {isSentFolder
                           ? `À : ${msg.destinataire || 'Non spécifié'}`

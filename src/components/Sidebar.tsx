@@ -16,7 +16,7 @@ export default function Sidebar({
   onNewMessageClick,
   onLogout,
 }: SidebarProps) {
-  // Vos adresses expéditeur connues
+  // Liste complète des adresses utilisées pour envoyer des messages
   const MY_EMAILS = [
     (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
     'ericgalaxy5@free.fr',
@@ -27,23 +27,23 @@ export default function Sidebar({
     return MY_EMAILS.includes(sender);
   };
 
-  // 1. Séparation des messages supprimés vs actifs
+  // 1. Filtrage Corbeille / Actifs
   const trashMessages = messages.filter((m) => m.is_deleted === true);
   const activeMessages = messages.filter((m) => !m.is_deleted);
 
-  // 2. Séparation des masqués vs visibles
+  // 2. Filtrage Masqués / Visibles
   const hiddenMessages = activeMessages.filter((m) => m.masque);
   const visibleMessages = activeMessages.filter((m) => !m.masque);
 
-  // 3. Séparation des envoyés vs reçus
+  // 3. Séparation stricte Envoyés vs Reçus parmi les messages visibles
   const sentMessages = visibleMessages.filter((m) => isSentByMe(m));
   const receivedMessages = visibleMessages.filter((m) => !isSentByMe(m));
 
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
 
-    // Récupération de tous les dossiers thématiques présents dans les messages visibles (Sherpa, Home, Général, etc.)
-    visibleMessages.forEach((msg) => {
+    // Génère les dossiers thématiques sur les e-mails reçus uniquement
+    receivedMessages.forEach((msg) => {
       const folderName = (msg.dossier || 'Général').trim();
       foldersMap.set(folderName, (foldersMap.get(folderName) || 0) + 1);
     });
@@ -57,19 +57,18 @@ export default function Sidebar({
       });
     });
 
-    // Tri alphabétique des dossiers personnalisés
     customFolderList.sort((a, b) => a.name.localeCompare(b.name));
 
     return [
       {
         id: 'tous',
         name: 'Tous les messages',
-        count: visibleMessages.length,
+        count: receivedMessages.length, // Affiche uniquement les e-mails reçus (ex: 4)
       },
       {
         id: 'envoyes',
         name: 'Messages envoyés',
-        count: sentMessages.length,
+        count: sentMessages.length, // Affiche vos e-mails envoyés (ex: 4)
       },
       ...customFolderList,
       {
