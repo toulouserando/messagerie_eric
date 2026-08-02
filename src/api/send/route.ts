@@ -4,17 +4,18 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: Request) {
   try {
-    const { to, subject, body } = await req.json();
+    const { to, subject, text, body } = await req.json();
 
     const data = await resend.emails.send({
       from: 'Eric <eric@ftstoulouse.online>',
-      to: [to],
+      to: Array.isArray(to) ? to : [to],
       subject: subject,
-      text: body,
+      text: text || body || '', // Accepte 'text' ou 'body' selon l'appelant
     });
 
     return Response.json(data);
-  } catch (error) {
-    return Response.json({ error }, { status: 500 });
+  } catch (error: any) {
+    console.error("Erreur Resend backend :", error);
+    return Response.json({ error: error.message || error }, { status: 500 });
   }
 }
