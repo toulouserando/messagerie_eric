@@ -24,18 +24,41 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Récupération dynamique de ton adresse email depuis les variables d'environnement Vite
+  const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase();
+
   const finalFiltered = useMemo(() => {
     const folderFiltered = messages.filter((msg) => {
       const isHidden = msg.masque === true || msg.is_visible === false;
       const isDeleted = msg.is_deleted === true;
+      const isSentByMe = (msg.expediteur || '').toLowerCase() === MY_EMAIL;
 
-      if (selectedFolderId === 'masques') return isHidden;
+      // 1. Dossier Corbeille
       if (selectedFolderId === 'corbeille') return isDeleted;
 
-      if (isHidden || isDeleted) return false;
-      if (selectedFolderId === 'tous') return true;
+      // Si le message est supprimé, il ne doit apparaître nulle part ailleurs
+      if (isDeleted) return false;
 
-      return (msg.dossier || '').toLowerCase() === selectedFolderId.toLowerCase();
+      // 2. Dossier Masqués
+      if (selectedFolderId === 'masques') return isHidden;
+
+      // Si le message est masqué, il ne doit pas apparaître dans les dossiers normaux
+      if (isHidden) return false;
+
+      // 3. Dossier Messages Envoyés
+      if (selectedFolderId === 'envoyes') return isSentByMe;
+
+      // --- POUR TOUS LES AUTRES DOSSIERS (REÇUS) : EXCLURE LES MESSAGES ENVOYÉS ---
+      if (isSentByMe) return false;
+
+      // 4. Dossier Tous les messages (Boîte de réception)
+      if (selectedFolderId === 'tous' || selectedFolderId === 'tous_les_messages') return true;
+
+      // 5. Filtrage par dossier spécifique (ex: Général, Sherpa, Divers...)
+      const currentFolder = (msg.dossier || 'Général').toLowerCase();
+      const targetFolder = selectedFolderId.toLowerCase();
+
+      return currentFolder === targetFolder;
     });
 
     if (!searchQuery.trim()) return folderFiltered;
@@ -50,7 +73,7 @@ export default function MessageList({
         rawContent.includes(query)
       );
     });
-  }, [messages, selectedFolderId, searchQuery]);
+  }, [messages, selectedFolderId, searchQuery, MY_EMAIL]);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -137,6 +160,7 @@ ${textContent}
               const isSelected = selectedMessageId === msg.id;
               const isHidden = msg.masque === true || msg.is_visible === false;
               const isUnread = !msg.is_read;
+              const isSentFolder = selectedFolderId === 'envoyes';
 
               return (
                 <motion.div
@@ -158,7 +182,6 @@ ${textContent}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
-                      {/* PASTILLE DYNAMIQUE : BLEUE SI NON LU, GRIS DISCRET SI LU */}
                       <span
                         className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-300 ${
                           isUnread ? 'bg-blue-600 animate-pulse' : 'bg-gray-300/80'
@@ -166,8 +189,11 @@ ${textContent}
                         title={isUnread ? 'Message non lu' : 'Message lu'}
                       />
 
+                      {/* Affiche "À :" dans Envoyés et "De :" dans la boîte de réception */}
                       <span className={`text-xs truncate ${isUnread ? 'font-bold text-gray-950' : 'font-semibold text-gray-700'}`}>
-                        À : {msg.destinataire || 'Non spécifié'}
+                        {isSentFolder
+                          ? `À : ${msg.destinataire || 'Non spécifié'}`
+                          : `De : ${msg.expediteur || 'Non spécifié'}`}
                       </span>
                     </div>
 
@@ -176,7 +202,6 @@ ${textContent}
                     </span>
                   </div>
 
-                  {/* TITRE DE L'OBJET EN GRAS SI NON LU */}
                   <h4 className={`text-sm line-clamp-1 mb-2 ${isUnread ? 'font-extrabold text-blue-950' : 'font-semibold text-gray-800'}`}>
                     {msg.objet || '(Sans objet)'}
                   </h4>
@@ -197,7 +222,6 @@ ${textContent}
                     </span>
 
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      {/* ACTION RAPIDE LU / NON LU DANS LA LISTE */}
                       {onToggleReadMessage && (
                         <button
                           onClick={(e) => {

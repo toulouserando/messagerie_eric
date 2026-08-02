@@ -33,6 +33,9 @@ export default function App() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
 
+  // Email de l'expéditeur principal
+  const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase();
+
   // ÉTATS DE RECHERCHE & FILTRES
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>({
@@ -64,7 +67,7 @@ export default function App() {
     if (currentMsg && currentMsg.is_read === false) {
       const timer = setTimeout(() => {
         markAsRead(selectedMessageId);
-      }, 500); // Délai évitant le conflit instantané au clic sur "Marquer non lu"
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [selectedMessageId, messages]);
@@ -95,9 +98,13 @@ export default function App() {
 
       setMessages(formattedMessages);
 
-      const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
-      if (visible.length > 0 && !selectedMessageId) {
-        setSelectedMessageId(visible[0].id);
+      // Sélectionner le 1er message visible de la boîte de réception (excluant les e-mails envoyés)
+      const visibleInbox = formattedMessages.filter(
+        (m) => !m.masque && !m.is_deleted && (m.expediteur || '').toLowerCase() !== MY_EMAIL
+      );
+
+      if (visibleInbox.length > 0 && !selectedMessageId) {
+        setSelectedMessageId(visibleInbox[0].id);
       }
     }
     setLoading(false);
@@ -178,17 +185,14 @@ export default function App() {
     setSelectedMessageId(msg.id);
   };
 
-  // NOUVELLE VERSION : ENVOI VIA RESEND + STOCKAGE DANS CONTACTS_UNIQUES
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
-    const sender = import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online';
-
     try {
       // 1. Envoi réel du mail via l'API Resend
       const resendRes = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: sender,
+          from: MY_EMAIL,
           to: newMsgData.destinataire,
           subject: newMsgData.objet,
           text: newMsgData.message,
@@ -201,7 +205,7 @@ export default function App() {
 
       // 2. Sauvegarde du message dans la base Supabase
       const payload = {
-        sender_email: sender,
+        sender_email: MY_EMAIL,
         recipient_email: newMsgData.destinataire,
         subject: newMsgData.objet,
         body: newMsgData.message,
@@ -215,7 +219,7 @@ export default function App() {
         return;
       }
 
-      // 3. Ajout dans contacts_uniques pour autoriser la réception future de cette adresse
+      // 3. Ajout dans contacts_uniques
       const { error: contactError } = await supabase
         .from('contacts_uniques')
         .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
@@ -224,7 +228,7 @@ export default function App() {
         console.error("Erreur lors de l'ajout dans contacts_uniques :", contactError.message);
       }
 
-      // 4. Mise à jour de l'affichage local
+      // 4. Mise à jour de l'affichage local et redirection automatique vers le dossier "envoyes"
       if (data && data[0]) {
         const inserted = data[0];
         const newMsg: Message = {
@@ -242,7 +246,7 @@ export default function App() {
 
         setMessages((prev) => [newMsg, ...prev]);
         setSelectedMessageId(newMsg.id);
-        setSelectedFolderId('tous');
+        setSelectedFolderId('envoyes');
       }
     } catch (err: any) {
       console.error("Erreur lors de l'exécution de l'envoi :", err.message);
@@ -308,23 +312,40 @@ export default function App() {
     setFilters(newFilters);
   };
 
+  // --- LOGIQUE DE FILTRAGE CENTRALE CORRIGÉE ---
   const filteredMessages = useMemo(() => {
     return messages.filter((msg) => {
-      if (selectedFolderId === 'corbeille') {
-        if (!msg.is_deleted) return false;
-      } else {
-        if (msg.is_deleted) return false;
+      const isSentByMe = (msg.expediteur || '').toLowerCase() === MY_EMAIL;
 
-        if (selectedFolderId === 'masques') {
-          if (!msg.masque) return false;
-        } else {
-          if (msg.masque) return false;
-          if (selectedFolderId !== 'tous' && (msg.dossier || '').toLowerCase() !== selectedFolderId.toLowerCase()) {
-            return false;
-          }
-        }
+      // 1. CORBEILLE
+      if (selectedFolderId === 'corbeille') {
+        return msg.is_deleted;
+      }
+      if (msg.is_deleted) return false;
+
+      // 2. MASQUÉS
+      if (selectedFolderId === 'masques') {
+        return msg.masque;
+      }
+      if (msg.masque) return false;
+
+      // 3. ENVOYÉS
+      if (selectedFolderId === 'envoyes') {
+        return isSentByMe;
       }
 
+      // POUR TOUTES LES AUTRES VUES (REÇUS) : EXCLURE LES ENVOYÉS
+      if (isSentByMe) return false;
+
+      // 4. TOUS LES MESSAGES (REÇUS)
+      if (selectedFolderId === 'tous' || selectedFolderId === 'tous_les_messages') {
+        return true;
+      }
+
+      // 5. DOSSIERS THÉMATIQUES (Général, Sherpa, etc.)
+      return (msg.dossier || 'Général').toLowerCase() === selectedFolderId.toLowerCase();
+    }).filter((msg) => {
+      // FILTRES DE RECHERCHE
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchGlobal =
@@ -337,21 +358,10 @@ export default function App() {
         if (!matchGlobal) return false;
       }
 
-      if (filters.objet && !msg.objet?.toLowerCase().includes(filters.objet.toLowerCase())) {
-        return false;
-      }
-
-      if (filters.message && !msg.message?.toLowerCase().includes(filters.message.toLowerCase())) {
-        return false;
-      }
-
-      if (filters.expediteur && !msg.expediteur?.toLowerCase().includes(filters.expediteur.toLowerCase())) {
-        return false;
-      }
-
-      if (filters.destinataire && !msg.destinataire?.toLowerCase().includes(filters.destinataire.toLowerCase())) {
-        return false;
-      }
+      if (filters.objet && !msg.objet?.toLowerCase().includes(filters.objet.toLowerCase())) return false;
+      if (filters.message && !msg.message?.toLowerCase().includes(filters.message.toLowerCase())) return false;
+      if (filters.expediteur && !msg.expediteur?.toLowerCase().includes(filters.expediteur.toLowerCase())) return false;
+      if (filters.destinataire && !msg.destinataire?.toLowerCase().includes(filters.destinataire.toLowerCase())) return false;
 
       if (filters.dateDebut) {
         const startDate = new Date(filters.dateDebut);
@@ -368,18 +378,27 @@ export default function App() {
 
       return true;
     });
-  }, [messages, selectedFolderId, searchTerm, filters]);
+  }, [messages, selectedFolderId, searchTerm, filters, MY_EMAIL]);
 
+  // CHANGEMENT DE DOSSIER CORRIGÉ : Sélectionne le bon 1er message du dossier actif
   const handleFolderSelect = (folderId: string) => {
     setSelectedFolderId(folderId);
 
     const nextFolderMessages = messages.filter((msg) => {
+      const isSentByMe = (msg.expediteur || '').toLowerCase() === MY_EMAIL;
+
       if (folderId === 'corbeille') return msg.is_deleted;
       if (msg.is_deleted) return false;
+
       if (folderId === 'masques') return msg.masque;
       if (msg.masque) return false;
-      if (folderId === 'tous') return true;
-      return (msg.dossier || '').toLowerCase() === folderId.toLowerCase();
+
+      if (folderId === 'envoyes') return isSentByMe;
+      if (isSentByMe) return false;
+
+      if (folderId === 'tous' || folderId === 'tous_les_messages') return true;
+
+      return (msg.dossier || 'Général').toLowerCase() === folderId.toLowerCase();
     });
 
     if (nextFolderMessages.length > 0) {
@@ -468,8 +487,8 @@ export default function App() {
                 <span>Vider la corbeille</span>
               </button>
             ) : (
-              <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline ml-2">
-                Dossier : {selectedFolderId.toUpperCase()}
+              <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline ml-2 uppercase">
+                Dossier : {selectedFolderId}
               </span>
             )}
           </div>
@@ -481,9 +500,9 @@ export default function App() {
           </div>
         ) : viewMode === 'pages' ? (
           <KeywordPagesView
-            messages={messages.filter((m) => !m.is_deleted)}
+            messages={messages.filter((m) => !m.is_deleted && (m.expediteur || '').toLowerCase() !== MY_EMAIL)}
             activeKeyword={selectedFolderId}
-            onSelectKeyword={(folder) => setSelectedFolderId(folder.toLowerCase())}
+            onSelectKeyword={(folder) => handleFolderSelect(folder.toLowerCase())}
             onDeleteMessage={handleDeleteMessage}
             onReplyMessage={handleReplyMessage}
             onForwardMessage={handleForwardMessage}
@@ -513,11 +532,12 @@ export default function App() {
           </div>
         )}
 
+        {/* VUE D'IMPRESSION */}
         {viewMode === 'messagerie' && (
           <div className="hidden print:block p-4 bg-white text-black font-sans">
             <div className="border-b-2 border-black pb-3 mb-4">
               <h1 className="text-xl font-bold uppercase">
-                Boîte de Réception — Dossier : {selectedFolderId}
+                Dossier : {selectedFolderId}
               </h1>
               <p className="text-xs text-gray-600 mt-1">
                 Impression générée le {new Date().toLocaleString('fr-FR')} | Nombre de messages : {filteredMessages.length}
