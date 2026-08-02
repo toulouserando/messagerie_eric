@@ -151,12 +151,10 @@ export default function App() {
   };
 
   const markAsRead = async (id: string) => {
-    // 1. Mise à jour immédiate côté interface
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, is_read: true } : m))
     );
 
-    // 2. Persistance dans la base de données
     const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', id);
     if (error) {
       console.error('Erreur mise à jour statut lu :', error.message);
@@ -180,48 +178,74 @@ export default function App() {
     setSelectedMessageId(msg.id);
   };
 
+  // NOUVELLE VERSION : ENVOI VIA RESEND + STOCKAGE DANS CONTACTS_UNIQUES
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
-    const payload = {
-      sender_email: import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online',
-      recipient_email: newMsgData.destinataire,
-      subject: newMsgData.objet,
-      body: newMsgData.message,
-    };
+    const sender = import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online';
 
-    const { data, error } = await supabase.from('messages').insert([payload]).select();
+    try {
+      // 1. Envoi réel du mail via l'API Resend
+      const resendRes = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: sender,
+          to: newMsgData.destinataire,
+          subject: newMsgData.objet,
+          text: newMsgData.message,
+        }),
+      });
 
-    if (error) {
-      console.error("Erreur lors de l'envoi :", error.message);
-      return;
-    }
-
-    if (data && data[0]) {
-      const { error: contactError } = await supabase.from('contacts').upsert(
-        { email: newMsgData.destinataire },
-        { onConflict: 'email' }
-      );
-
-      if (contactError) {
-        console.error("Erreur lors de l'ajout du contact :", contactError.message);
+      if (!resendRes.ok) {
+        console.warn("Échec de l'envoi direct via l'API route Resend. Traitement Supabase conservé.");
       }
 
-      const inserted = data[0];
-      const newMsg: Message = {
-        id: inserted.id,
-        expediteur: inserted.sender_email,
-        destinataire: inserted.recipient_email,
-        objet: inserted.subject || '',
-        message: inserted.body,
-        dossier: inserted.theme || 'Général',
-        date: inserted.created_at,
-        masque: false,
-        is_deleted: false,
+      // 2. Sauvegarde du message dans la base Supabase
+      const payload = {
+        sender_email: sender,
+        recipient_email: newMsgData.destinataire,
+        subject: newMsgData.objet,
+        body: newMsgData.message,
         is_read: true,
       };
 
-      setMessages((prev) => [newMsg, ...prev]);
-      setSelectedMessageId(newMsg.id);
-      setSelectedFolderId('tous');
+      const { data, error } = await supabase.from('messages').insert([payload]).select();
+
+      if (error) {
+        console.error("Erreur Supabase lors de l'enregistrement :", error.message);
+        return;
+      }
+
+      // 3. Ajout dans contacts_uniques pour autoriser la réception future de cette adresse
+      const { error: contactError } = await supabase
+        .from('contacts_uniques')
+        .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
+
+      if (contactError) {
+        console.error("Erreur lors de l'ajout dans contacts_uniques :", contactError.message);
+      }
+
+      // 4. Mise à jour de l'affichage local
+      if (data && data[0]) {
+        const inserted = data[0];
+        const newMsg: Message = {
+          id: inserted.id,
+          expediteur: inserted.sender_email,
+          destinataire: inserted.recipient_email,
+          objet: inserted.subject || '',
+          message: inserted.body,
+          dossier: inserted.theme || 'Général',
+          date: inserted.created_at,
+          masque: false,
+          is_deleted: false,
+          is_read: true,
+        };
+
+        setMessages((prev) => [newMsg, ...prev]);
+        setSelectedMessageId(newMsg.id);
+        setSelectedFolderId('tous');
+      }
+    } catch (err: any) {
+      console.error("Erreur lors de l'exécution de l'envoi :", err.message);
     }
   };
 
