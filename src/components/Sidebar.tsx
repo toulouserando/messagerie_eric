@@ -1,5 +1,5 @@
 import { Folder, Message } from '../types';
-import { Plus, Folder as FolderIcon, Inbox, LogOut, EyeOff, Trash2 } from 'lucide-react';
+import { Plus, Folder as FolderIcon, Inbox, LogOut, EyeOff, Trash2, Send } from 'lucide-react';
 
 interface SidebarProps {
   messages: Message[];
@@ -10,25 +10,41 @@ interface SidebarProps {
 }
 
 export default function Sidebar({
-  messages,
+  messages = [],
   selectedFolderId,
   onSelectFolder,
   onNewMessageClick,
   onLogout,
 }: SidebarProps) {
-  // 1. On sépare les messages actifs (non supprimés) et les messages dans la corbeille
-  const activeMessages = messages.filter((m) => !m.is_deleted);
-  const trashMessages = messages.filter((m) => m.is_deleted === true);
+  // Vos adresses expéditeur reconnues
+  const MY_EMAILS = [
+    (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
+    'ericgalaxy5@free.fr',
+  ];
 
-  // 2. Filtrage des messages visibles vs masqués parmi les actifs
-  const visibleMessages = activeMessages.filter((m) => !m.masque);
+  const isSentByMe = (msg: Message) => {
+    const sender = (msg.expediteur || '').toLowerCase().trim();
+    return MY_EMAILS.includes(sender);
+  };
+
+  // 1. Séparation des messages supprimés vs actifs
+  const trashMessages = messages.filter((m) => m.is_deleted === true);
+  const activeMessages = messages.filter((m) => !m.is_deleted);
+
+  // 2. Séparation des masqués vs visibles
   const hiddenMessages = activeMessages.filter((m) => m.masque);
+  const visibleMessages = activeMessages.filter((m) => !m.masque);
+
+  // 3. Séparation des envoyés vs reçus parmi les visibles
+  const sentMessages = visibleMessages.filter((m) => isSentByMe(m));
+  const receivedMessages = visibleMessages.filter((m) => !isSentByMe(m));
 
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
     foldersMap.set('Divers', 0);
 
-    visibleMessages.forEach((msg) => {
+    // Compte uniquement les e-mails reçus dans les dossiers thématiques
+    receivedMessages.forEach((msg) => {
       const folderName = msg.dossier || 'Divers';
       foldersMap.set(folderName, (foldersMap.get(folderName) || 0) + 1);
     });
@@ -52,7 +68,12 @@ export default function Sidebar({
       {
         id: 'tous',
         name: 'Tous les messages',
-        count: visibleMessages.length,
+        count: receivedMessages.length,
+      },
+      {
+        id: 'envoyes',
+        name: 'Messages envoyés',
+        count: sentMessages.length,
       },
       ...folderList,
       {
@@ -103,6 +124,7 @@ export default function Sidebar({
         {folders.map((folder) => {
           const isSelected = selectedFolderId === folder.id;
           const isAll = folder.id === 'tous';
+          const isSent = folder.id === 'envoyes';
           const isHiddenFolder = folder.id === 'masques';
           const isTrashFolder = folder.id === 'corbeille';
 
@@ -122,6 +144,8 @@ export default function Sidebar({
               <div className="flex items-center gap-3">
                 {isAll ? (
                   <Inbox className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                ) : isSent ? (
+                  <Send className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
                 ) : isHiddenFolder ? (
                   <EyeOff className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
                 ) : isTrashFolder ? (
