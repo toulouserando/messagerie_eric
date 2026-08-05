@@ -165,40 +165,30 @@ export default function App() {
     }
   };
 
-  const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
-    const newReadStatus = !currentReadStatus;
-
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, is_read: newReadStatus } : m))
-    );
-
-    const { error } = await supabase.from('messages').update({ is_read: newReadStatus }).eq('id', id);
-    if (error) {
-      console.error('Erreur mise à jour statut lu/non lu :', error.message);
-    }
-  };
-
-  const handleSelectMessage = (msg: Message) => {
-    setSelectedMessageId(msg.id);
-  };
-
-  const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
+const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
     try {
+      // 1. TENTATIVE D'ENVOI VERS L'EXTÉRIEUR (RESEND)
       const resendRes = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: MY_EMAIL,
           to: newMsgData.destinataire,
           subject: newMsgData.objet,
           text: newMsgData.message,
         }),
       });
 
+      const resendData = await resendRes.json();
+
       if (!resendRes.ok) {
-        console.warn("Échec de l'envoi direct via l'API route Resend. Traitement Supabase conservé.");
+        console.error("❌ Échec de l'envoi externe (Resend) :", resendData);
+        alert(`Impossible d'envoyer l'e-mail externe : ${resendData.error?.message || JSON.stringify(resendData.error || resendData)}`);
+        return; // Stopper l'exécution si l'e-mail externe a échoué
       }
 
+      console.log("✅ E-mail transmis avec succès à Resend :", resendData);
+
+      // 2. ENREGISTREMENT INTERNE (SUPABASE)
       const payload = {
         sender_email: MY_EMAIL,
         recipient_email: newMsgData.destinataire,
@@ -211,9 +201,11 @@ export default function App() {
 
       if (error) {
         console.error("Erreur Supabase lors de l'enregistrement :", error.message);
+        alert(`Email envoyé via Resend mais erreur d'enregistrement local Supabase : ${error.message}`);
         return;
       }
 
+      // 3. MISE À JOUR DE LA LISTE DE CONTACTS
       const { error: contactError } = await supabase
         .from('contacts_uniques')
         .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
@@ -222,6 +214,7 @@ export default function App() {
         console.error("Erreur lors de l'ajout dans contacts_uniques :", contactError.message);
       }
 
+      // 4. MISE À JOUR DE L'INTERFACE UTILISATEUR
       if (data && data[0]) {
         const inserted = data[0];
         const newMsg: Message = {
@@ -243,6 +236,7 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Erreur lors de l'exécution de l'envoi :", err.message);
+      alert(`Erreur réseau/client : ${err.message}`);
     }
   };
 
