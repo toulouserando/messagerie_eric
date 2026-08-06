@@ -12,51 +12,6 @@ function extractEmail(rawEmail: string): string {
   return (match ? match[1] : rawEmail).trim().toLowerCase();
 }
 
-// Récupération du contenu textuel du mail via l'API Resend avec diagnostic d'erreur
-async function fetchResendEmailBody(emailId: string): Promise<{ body: string; errorLog: string }> {
-  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY || '';
-
-  if (!apiKey) {
-    return { body: '', errorLog: 'Erreur: RESEND_API_KEY non lue sur Vercel' };
-  }
-
-  const endpoints = [
-    `https://api.resend.com/emails/received/${emailId}`,
-    `https://api.resend.com/emails/${emailId}`
-  ];
-
-  let lastError = '';
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const content = data.text || data.html || data.data?.text || data.data?.html || '';
-        if (content) {
-          return { body: content, errorLog: '' };
-        }
-        lastError = `Statut 200 OK mais aucun champ text/html trouvé dans l'API`;
-      } else {
-        const errText = await res.text();
-        lastError = `HTTP ${res.status} sur ${url} -> ${errText}`;
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      lastError = `Exception réseau sur ${url} : ${msg}`;
-    }
-  }
-
-  return { body: '', errorLog: lastError };
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Méthode non autorisée' });
@@ -93,29 +48,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ status: 'ignored', reason: 'Expéditeur non autorisé' });
     }
 
-    // 2. Extraction du corps du message
-    let messageBody = emailData.text || emailData.html || '';
-    const emailId = emailData.email_id || emailData.id || payload.data?.email_id || payload.data?.id;
-
-    if (!messageBody && emailId) {
-      const result = await fetchResendEmailBody(emailId);
-      messageBody = result.body;
-      if (!messageBody) {
-        messageBody = `(Message vide - ${result.errorLog})`;
-      }
-    }
+    // 2. Extraction du corps du message directement depuis le payload
+    const messageBody = emailData.text || emailData.html || payload.text || payload.html || '(Message sans texte)';
 
     const rawRecipient = Array.isArray(emailData.to) ? emailData.to[0] : (emailData.to || '');
     const cleanRecipient = extractEmail(rawRecipient) || 'eric@ftstoulouse.online';
     const objet = emailData.subject || '(Sans objet)';
 
-    // 3. Insertion dans Supabase avec la structure SQL exacte
+    // 3. Insertion dans Supabase
     const { data, error: insertError } = await supabase.from('messages').insert([
       {
         sender_email: cleanSender,
         recipient_email: cleanRecipient,
         subject: objet,
-        body: messageBody || '(Message vide)',
+        body: messageBody,
         theme: 'Général',
         is_read: false,
         is_visible: true,
