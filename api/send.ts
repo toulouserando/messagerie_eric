@@ -9,11 +9,8 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUP
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Domaine autorisé et vérifié chez Resend pour la couche de transport
+// Domaine autorisé et vérifié chez Resend pour l'envoi et la réception
 const VERIFIED_SENDER_EMAIL = 'eric@ftstoulouse.online';
-
-// Adresse identifiant utilisateur Supabase par défaut
-const DEFAULT_ACCOUNT_EMAIL = 'ericgalaxy5@free.fr';
 
 // Fonction utilitaire pour transformer des chaînes ou tableaux en liste d'emails nettoyés
 const parseEmailList = (input: string | string[] | undefined): string[] => {
@@ -46,11 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { to, cc, bcc, subject, text, message, expediteur, dossier } = req.body;
+    const { to, cc, bcc, subject, text, message, dossier } = req.body;
     const bodyText = text || message || '';
-
-    // Définition de l'adresse de compte
-    const userAccountEmail = expediteur || DEFAULT_ACCOUNT_EMAIL;
 
     // Extraction et nettoyage des adresses e-mails
     const toList = parseEmailList(to);
@@ -66,8 +60,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ÉTAPE 1 : ENVOI EXTERNE VIA RESEND
     // -------------------------------------------------------------
     const resendPayload: Parameters<typeof resend.emails.send>[0] = {
-      from: `Eric <${VERIFIED_SENDER_EMAIL}>`, // Adresse DNS vérifiée obligatoire chez Resend
-      replyTo: userAccountEmail,                 // Redirige les réponses directement vers ericgalaxy5@free.fr
+      from: `Eric <${VERIFIED_SENDER_EMAIL}>`,
+      replyTo: VERIFIED_SENDER_EMAIL, // Forcer la réponse vers eric@ftstoulouse.online
       to: toList.length > 0 ? toList : [VERIFIED_SENDER_EMAIL],
       subject: subject || '(Sans objet)',
       text: bodyText,
@@ -97,13 +91,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('messages')
       .insert([
         {
-          sender_email: userAccountEmail, // Enregistré sous l'identité ericgalaxy5@free.fr
+          sender_email: VERIFIED_SENDER_EMAIL, // Enregistré sous l'adresse du domaine
+          expediteur: VERIFIED_SENDER_EMAIL,
           recipient_email: recipientEmail || 'Copie cachée',
+          destinataire: recipientEmail || 'Copie cachée',
           cc_email: ccEmail || null,
           bcc_email: bccEmail || null,
           subject: subject || '(Sans objet)',
+          objet: subject || '(Sans objet)',
           body: bodyText,
-          folder: dossier || 'Divers',
+          message: bodyText,
+          folder: dossier || 'Général',
+          dossier: dossier || 'Général',
           is_read: true,
         },
       ])
