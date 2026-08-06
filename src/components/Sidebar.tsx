@@ -21,14 +21,15 @@ export default function Sidebar({
     'ericgalaxy5@free.fr',
   ];
 
+  // Détection souple (gère les majuscules, espaces et formats avec nom)
   const isSentByMe = (msg: Message) => {
-    const sender = (msg.expediteur || '').toLowerCase().trim();
-    return MY_EMAILS.includes(sender);
+    const sender = (msg.expediteur || '').toLowerCase();
+    return MY_EMAILS.some((email) => sender.includes(email));
   };
 
   const isToMe = (msg: Message) => {
-    const recipient = (msg.destinataire || '').toLowerCase().trim();
-    return MY_EMAILS.includes(recipient);
+    const recipient = (msg.destinataire || '').toLowerCase();
+    return MY_EMAILS.some((email) => recipient.includes(email));
   };
 
   const trashMessages = messages.filter((m) => m.is_deleted === true);
@@ -37,20 +38,23 @@ export default function Sidebar({
   const hiddenMessages = activeMessages.filter((m) => m.masque);
   const visibleMessages = activeMessages.filter((m) => !m.masque);
 
+  // Messages envoyés par moi
   const sentMessages = visibleMessages.filter((m) => isSentByMe(m));
+
+  // Messages reçus (boîte de réception)
+  const receivedMessages = visibleMessages.filter((m) => !isSentByMe(m) || isToMe(m));
 
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
 
-    // Compte uniquement les messages REÇUS (ou auto-envoyés) pour les dossiers thématiques
-    visibleMessages.forEach((msg) => {
-      const sent = isSentByMe(msg);
-      const toMe = isToMe(msg);
+    // Dossier Général par défaut
+    foldersMap.set('Général', 0);
 
-      if (!sent || toMe) {
-        const folderName = (msg.dossier || 'Général').trim();
-        foldersMap.set(folderName, (foldersMap.get(folderName) || 0) + 1);
-      }
+    // Compte dynamique par sous-dossier uniquement pour les messages reçus
+    receivedMessages.forEach((msg) => {
+      const folderName = (msg.dossier || 'Général').trim();
+      const formattedName = folderName.charAt(0).toUpperCase() + folderName.slice(1);
+      foldersMap.set(formattedName, (foldersMap.get(formattedName) || 0) + 1);
     });
 
     const customFolderList: Folder[] = [];
@@ -68,12 +72,12 @@ export default function Sidebar({
       {
         id: 'tous',
         name: 'Tous les messages',
-        count: visibleMessages.length,
+        count: receivedMessages.length, // Total des reçus (4)
       },
       {
         id: 'envoyes',
         name: 'Messages envoyés',
-        count: sentMessages.length,
+        count: sentMessages.length, // Total des envoyés (15)
       },
       ...customFolderList,
       {
@@ -122,7 +126,7 @@ export default function Sidebar({
         </div>
 
         {folders.map((folder) => {
-          const isSelected = selectedFolderId === folder.id;
+          const isSelected = selectedFolderId.toLowerCase() === folder.id;
           const isAll = folder.id === 'tous';
           const isSent = folder.id === 'envoyes';
           const isHiddenFolder = folder.id === 'masques';
