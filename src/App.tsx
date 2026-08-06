@@ -180,55 +180,53 @@ export default function App() {
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
     try {
-      // 1. TENTATIVE D'ENVOI EXTERNE VIA LA ROUTE API RESEND (/api/send)
-      let sendSuccess = false;
-      let errorMessage = '';
+      // 1. ENVOI VIA LA ROUTE API VERCEL /api/send
+      const response = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: newMsgData.destinataire,
+          subject: newMsgData.objet,
+          text: newMsgData.message,
+          message: newMsgData.message,
+          expediteur: MY_EMAIL,
+        }),
+      });
 
-      try {
-        const response = await fetch('/api/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: newMsgData.destinataire,
-            subject: newMsgData.objet,
-            text: newMsgData.message,
-            html: `<p>${newMsgData.message.replace(/\n/g, '<br>')}</p>`,
-          }),
-        });
+      const resData = await response.json();
 
-        const resData = await response.json();
-
-        if (response.ok) {
-          sendSuccess = true;
-          console.log("✅ E-mail transmis avec succès à Resend :", resData);
-        } else {
-          errorMessage = resData.error?.message || resData.error || 'Erreur inconnue lors de l\'envoi via Vercel API.';
-        }
-      } catch (apiErr: unknown) {
-        // En cas de secours : tentative via Supabase Edge Function si la route API Vercel n'existe pas
-        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('send-email', {
-          body: {
-            to: newMsgData.destinataire,
-            subject: newMsgData.objet,
-            html: `<p>${newMsgData.message.replace(/\n/g, '<br>')}</p>`,
-          },
-        });
-
-        if (!edgeError) {
-          sendSuccess = true;
-          console.log("✅ E-mail transmis avec succès via Edge Function :", edgeData);
-        } else {
-          errorMessage = edgeError.message || 'Impossible de joindre le serveur d\'envoi.';
-        }
+      if (!response.ok) {
+        const errorMsg = resData.error?.message || resData.error || `Erreur serveur (HTTP ${response.status})`;
+        alert(`Échec d'envoi de l'e-mail : ${errorMsg}`);
+        return;
       }
 
-      if (!sendSuccess) {
-        console.error("❌ Échec de l'envoi externe :", errorMessage);
-        alert(`Impossible d'envoyer l'e-mail externe : ${errorMessage}`);
-        return; // Stopper l'exécution si l'envoi externe a échoué
+      console.log("✅ Message traité par l'API /api/send :", resData);
+
+      // Si le backend api/send s'est déjà chargé de l'insertion Supabase BDD
+      if (resData.messageRecord) {
+        const inserted = resData.messageRecord;
+        const newMsg: Message = {
+          id: inserted.id,
+          expediteur: inserted.sender_email,
+          destinataire: inserted.recipient_email,
+          objet: inserted.subject || '',
+          message: inserted.body,
+          dossier: inserted.theme || 'Général',
+          date: inserted.created_at,
+          masque: false,
+          is_deleted: false,
+          is_read: true,
+        };
+
+        setMessages((prev) => [newMsg, ...prev]);
+        setSelectedMessageId(newMsg.id);
+        setSelectedFolderId('envoyes');
+        setIsComposeOpen(false);
+        return;
       }
 
-      // 2. ENREGISTREMENT INTERNE (SUPABASE BDD)
+      // 2. SINON ENREGISTREMENT LOCAL SUPABASE BDD
       const payload = {
         sender_email: MY_EMAIL,
         recipient_email: newMsgData.destinataire,
@@ -241,18 +239,14 @@ export default function App() {
 
       if (error) {
         console.error("Erreur Supabase lors de l'enregistrement :", error.message);
-        alert(`Email envoyé via Resend mais erreur d'enregistrement local Supabase : ${error.message}`);
+        alert(`E-mail envoyé via Resend mais erreur d'enregistrement local : ${error.message}`);
         return;
       }
 
       // 3. MISE À JOUR DE LA LISTE DE CONTACTS
-      const { error: contactError } = await supabase
+      await supabase
         .from('contacts_uniques')
         .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
-
-      if (contactError) {
-        console.error("Erreur lors de l'ajout dans contacts_uniques :", contactError.message);
-      }
 
       // 4. MISE À JOUR DE L'INTERFACE UTILISATEUR
       if (data && data[0]) {
@@ -274,10 +268,12 @@ export default function App() {
         setSelectedMessageId(newMsg.id);
         setSelectedFolderId('envoyes');
       }
+
+      setIsComposeOpen(false);
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       console.error("Erreur lors de l'exécution de l'envoi :", errMessage);
-      alert(`Erreur réseau/client : ${errMessage}`);
+      alert(`Erreur réseau : ${errMessage}\n\nVérifie que le fichier api/send.ts est bien placé à la racine de ton projet.`);
     }
   };
 
@@ -344,7 +340,7 @@ export default function App() {
     setSelectedMessageId(msg.id);
   };
 
-  // --- LOGIQUE DE FILTRAGE DU DOSSIER CORRIGÉE ---
+  // LOGIQUE DE FILTRAGE DU DOSSIER
   const filterByFolder = (msg: Message, folderId: string) => {
     const folderKey = folderId.toLowerCase().trim();
     const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
