@@ -1,294 +1,193 @@
-import { useState, useMemo } from 'react';
-import { Message } from '../types';
-import { Search, Mail, MailOpen, Trash2, Eye, EyeOff, Printer, Download } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Folder, Message } from '../types';
+import { Plus, Folder as FolderIcon, Inbox, LogOut, EyeOff, Trash2, Send } from 'lucide-react';
 
-interface MessageListProps {
+interface SidebarProps {
   messages: Message[];
   selectedFolderId: string;
-  selectedMessageId: string | null;
-  onSelectMessage: (message: Message) => void;
-  onDeleteMessage: (id: string) => void;
-  onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
-  onToggleReadMessage?: (id: string, currentReadStatus: boolean) => void;
+  onSelectFolder: (folderId: string) => void;
+  onNewMessageClick: () => void;
+  onLogout: () => void;
 }
 
-export default function MessageList({
+export default function Sidebar({
   messages = [],
   selectedFolderId,
-  selectedMessageId,
-  onSelectMessage,
-  onDeleteMessage,
-  onToggleHideMessage,
-  onToggleReadMessage,
-}: MessageListProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-
+  onSelectFolder,
+  onNewMessageClick,
+  onLogout,
+}: SidebarProps) {
   const MY_EMAILS = [
     (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
     'ericgalaxy5@free.fr',
   ];
 
-  const finalFiltered = useMemo(() => {
-    const folderFiltered = messages.filter((msg) => {
-      const isHidden = msg.masque === true || msg.is_visible === false;
-      const isDeleted = msg.is_deleted === true;
-      const expediteur = (msg.expediteur || '').toLowerCase().trim();
-      const destinataire = (msg.destinataire || '').toLowerCase().trim();
-      
-      const isSentByMe = MY_EMAILS.includes(expediteur);
-      const isToMe = MY_EMAILS.includes(destinataire);
-      const folderKey = selectedFolderId.toLowerCase().trim();
+  const isSentByMe = (msg: Message) => {
+    const sender = (msg.expediteur || '').toLowerCase().trim();
+    return MY_EMAILS.includes(sender);
+  };
 
-      // 1. Corbeille
-      if (folderKey === 'corbeille' || folderKey === 'trash') return isDeleted;
-      if (isDeleted) return false;
+  const isToMe = (msg: Message) => {
+    const recipient = (msg.destinataire || '').toLowerCase().trim();
+    return MY_EMAILS.includes(recipient);
+  };
 
-      // 2. Masqués
-      if (folderKey === 'masques' || folderKey === 'messages masqués' || folderKey === 'archived') return isHidden;
-      if (isHidden) return false;
+  // 1. Filtrage principal par statut
+  const trashMessages = messages.filter((m) => m.is_deleted === true);
+  const activeMessages = messages.filter((m) => !m.is_deleted);
 
-      // 3. Messages envoyés (tout ce qui part de mes adresses)
-      if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') return isSentByMe;
+  const hiddenMessages = activeMessages.filter((m) => m.masque);
+  const visibleMessages = activeMessages.filter((m) => !m.masque);
 
-      // 4. Tous les messages (la totalité des e-mails non supprimés et non masqués)
-      if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
-        return true;
-      }
+  // 2. Séparation Envoyés vs Reçus
+  const sentMessages = visibleMessages.filter((m) => isSentByMe(m) && !isToMe(m));
+  const receivedMessages = visibleMessages.filter((m) => !isSentByMe(m) || isToMe(m));
 
-      // 5. Dossiers thématiques (ex: Général, Sherpa, Home)
-      // Un dossier de boîte de réception ne contient QUE les messages reçus (ou auto-envoyés)
-      const currentFolder = (msg.dossier || 'Général').trim().toLowerCase();
-      if (currentFolder === folderKey) {
-        return !isSentByMe || isToMe;
-      }
+  // 3. Génération dynamique de la liste des dossiers thématiques
+  const getFolders = (): Folder[] => {
+    const foldersMap = new Map<string, number>();
 
-      return false;
+    // Dossier par défaut garanti
+    foldersMap.set('Général', 0);
+
+    // Comptage dynamique de tous les sous-dossiers existants dans les messages reçus
+    receivedMessages.forEach((msg) => {
+      const folderName = (msg.dossier || 'Général').trim();
+      // Première lettre en majuscule pour l'affichage
+      const formattedName = folderName.charAt(0).toUpperCase() + folderName.slice(1);
+      foldersMap.set(formattedName, (foldersMap.get(formattedName) || 0) + 1);
     });
 
-    if (!searchQuery.trim()) return folderFiltered;
-
-    const query = searchQuery.toLowerCase().trim();
-    return folderFiltered.filter((msg) => {
-      const rawContent = (msg.message || '').toLowerCase();
-      return (
-        (msg.objet || '').toLowerCase().includes(query) ||
-        (msg.destinataire || '').toLowerCase().includes(query) ||
-        (msg.expediteur || '').toLowerCase().includes(query) ||
-        rawContent.includes(query)
-      );
-    });
-  }, [messages, selectedFolderId, searchQuery]);
-
-  const formatDate = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-
-      return d.toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
+    const customFolderList: Folder[] = [];
+    foldersMap.forEach((count, name) => {
+      customFolderList.push({
+        id: name.toLowerCase(),
+        name,
+        count,
       });
-    } catch {
-      return dateStr;
-    }
+    });
+
+    // Tri alphabétique des dossiers thématiques
+    customFolderList.sort((a, b) => a.name.localeCompare(b.name));
+
+    return [
+      {
+        id: 'tous',
+        name: 'Tous les messages',
+        count: receivedMessages.length, // Somme exacte de tous les dossiers thématiques
+      },
+      {
+        id: 'envoyes',
+        name: 'Messages envoyés',
+        count: sentMessages.length,
+      },
+      ...customFolderList,
+      {
+        id: 'masques',
+        name: 'Messages masqués',
+        count: hiddenMessages.length,
+      },
+      {
+        id: 'corbeille',
+        name: 'Corbeille',
+        count: trashMessages.length,
+      },
+    ];
   };
 
-  const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
-    e.stopPropagation();
-
-    const textContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
-
-    const content = `==================================================
-EXPÉDITEUR   : ${msg.expediteur || 'Inconnu'}
-DESTINATAIRE : ${msg.destinataire || 'Inconnu'}
-DATE         : ${formatDate(msg.date)}
-DOSSIER      : ${msg.dossier || 'Général'}
-OBJET        : ${msg.objet || '(Sans objet)'}
-==================================================
-
-${textContent}
-`;
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const safeSubject = (msg.objet || 'message').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    link.href = url;
-    link.download = `${safeSubject}_${msg.id}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const handlePrintSingleMessage = (e: React.MouseEvent, msg: Message) => {
-    e.stopPropagation();
-    onSelectMessage(msg);
-    setTimeout(() => {
-      window.print();
-    }, 150);
-  };
+  const folders = getFolders();
 
   return (
-    <div id="message-list-container" className="w-96 border-r border-gray-200 bg-gray-50/30 flex flex-col h-full shrink-0">
-      <div className="p-4 bg-white border-b border-gray-200 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 stroke-[1.75]" />
-          <input
-            id="search-messages-input"
-            type="text"
-            placeholder="Rechercher un message..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 focus:bg-white transition-all text-gray-900 placeholder:text-gray-400"
-          />
+    <aside id="sidebar-container" className="w-80 border-r border-gray-200 bg-white flex flex-col h-full shrink-0">
+      <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-xs">
+            <span className="text-white font-bold text-sm">M</span>
+          </div>
+          <div>
+            <h2 className="text-base font-bold tracking-tight text-gray-800">Messagerie</h2>
+            <p className="text-[10px] text-gray-400 font-mono font-medium uppercase tracking-wider">Sherpa Workspace</p>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {finalFiltered.length === 0 ? (
-          <div className="text-center py-12 px-4">
-            <div className="w-12 h-12 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Mail className="w-5 h-5 stroke-[1.5]" />
-            </div>
-            <p className="text-sm font-medium text-gray-900">Aucun message</p>
-            <p className="text-xs text-gray-400 mt-1">
-              {searchQuery ? 'Aucun résultat pour cette recherche.' : 'Ce dossier est actuellement vide.'}
-            </p>
-          </div>
-        ) : (
-          <AnimatePresence initial={false}>
-            {finalFiltered.map((msg) => {
-              const isSelected = selectedMessageId === msg.id;
-              const isHidden = msg.masque === true || msg.is_visible === false;
-              const isUnread = !msg.is_read;
-              const expediteur = (msg.expediteur || '').toLowerCase().trim();
-              const destinataire = (msg.destinataire || '').toLowerCase().trim();
-              const isSentFolder = selectedFolderId.toLowerCase() === 'envoyes' || (MY_EMAILS.includes(expediteur) && !MY_EMAILS.includes(destinataire));
-
-              return (
-                <motion.div
-                  id={`message-card-${msg.id}`}
-                  key={msg.id}
-                  layoutId={`msg-card-layout-${msg.id}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  onClick={() => onSelectMessage(msg)}
-                  className={`group relative p-4 rounded-xl border text-left cursor-pointer transition-all ${
-                    isSelected
-                      ? 'bg-white border-blue-600 ring-2 ring-blue-600/10 shadow-md shadow-blue-100/30'
-                      : isUnread
-                      ? 'bg-blue-50/40 border-blue-200 hover:bg-blue-50/70'
-                      : 'bg-white hover:bg-gray-50 border-gray-200 shadow-xs'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-300 ${
-                          isUnread ? 'bg-blue-600 animate-pulse' : 'bg-gray-300/80'
-                        }`}
-                        title={isUnread ? 'Message non lu' : 'Message lu'}
-                      />
-
-                      <span className={`text-xs truncate ${isUnread ? 'font-bold text-gray-950' : 'font-semibold text-gray-700'}`}>
-                        {isSentFolder
-                          ? `À : ${msg.destinataire || 'Non spécifié'}`
-                          : `De : ${msg.expediteur || 'Non spécifié'}`}
-                      </span>
-                    </div>
-
-                    <span className="text-[10px] text-gray-400 font-medium shrink-0 font-mono">
-                      {formatDate(msg.date)}
-                    </span>
-                  </div>
-
-                  <h4 className={`text-sm line-clamp-1 mb-2 ${isUnread ? 'font-extrabold text-blue-950' : 'font-semibold text-gray-800'}`}>
-                    {msg.objet || '(Sans objet)'}
-                  </h4>
-
-                  <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-3">
-                    {msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
-                  </p>
-
-                  <div className="flex items-center justify-between">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold tracking-wide uppercase ${
-                      msg.dossier === 'Sherpa'
-                        ? 'bg-blue-50 text-blue-700 border border-blue-100/50'
-                        : msg.dossier === 'Divers'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-100/50'
-                        : 'bg-purple-50 text-purple-700 border border-purple-100/50'
-                    }`}>
-                      {msg.dossier || 'Général'}
-                    </span>
-
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      {onToggleReadMessage && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleReadMessage(msg.id, !!msg.is_read);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                          title={msg.is_read ? 'Marquer comme non lu' : 'Marquer comme lu'}
-                        >
-                          {msg.is_read ? <Mail className="w-3.5 h-3.5 text-amber-600" /> : <MailOpen className="w-3.5 h-3.5 text-blue-600" />}
-                        </button>
-                      )}
-
-                      <button
-                        onClick={(e) => handleDownloadSingleMessage(e, msg)}
-                        className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                        title="Télécharger cet e-mail (.txt)"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        onClick={(e) => handlePrintSingleMessage(e, msg)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        title="Imprimer cet e-mail"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                      </button>
-
-                      {onToggleHideMessage && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleHideMessage(msg.id, isHidden);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                          title={isHidden ? 'Réafficher le message' : 'Masquer le message'}
-                        >
-                          {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                        </button>
-                      )}
-
-                      <button
-                        id={`btn-delete-${msg.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteMessage(msg.id);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        title="Supprimer le message"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        )}
+      <div className="p-5">
+        <button
+          id="btn-compose-message"
+          onClick={onNewMessageClick}
+          className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2 shadow-xs hover:shadow-md transition-all cursor-pointer"
+        >
+          <Plus className="w-4 h-4 stroke-[2.5]" />
+          <span>Nouveau message</span>
+        </button>
       </div>
-    </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
+        <div className="px-3 mb-2">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest font-mono">Dossiers</span>
+        </div>
+
+        {folders.map((folder) => {
+          const isSelected = selectedFolderId.toLowerCase() === folder.id;
+          const isAll = folder.id === 'tous';
+          const isSent = folder.id === 'envoyes';
+          const isHiddenFolder = folder.id === 'masques';
+          const isTrashFolder = folder.id === 'corbeille';
+
+          return (
+            <button
+              id={`folder-btn-${folder.id}`}
+              key={folder.id}
+              onClick={() => onSelectFolder(folder.id)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm transition-all cursor-pointer group ${
+                isSelected
+                  ? isTrashFolder
+                    ? 'bg-red-50 text-red-800 font-semibold border-r-4 border-red-600 rounded-r-none'
+                    : 'bg-blue-50 text-blue-800 font-semibold border-r-4 border-blue-600 rounded-r-none'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {isAll ? (
+                  <Inbox className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                ) : isSent ? (
+                  <Send className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                ) : isHiddenFolder ? (
+                  <EyeOff className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                ) : isTrashFolder ? (
+                  <Trash2 className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-red-700' : 'text-gray-400 group-hover:text-red-600'}`} />
+                ) : (
+                  <FolderIcon className={`w-4 h-4 stroke-[1.75] ${isSelected ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                )}
+                <span className="truncate">{folder.name}</span>
+              </div>
+              <span
+                className={`text-xs font-mono font-medium px-2 py-0.5 rounded-full ${
+                  isSelected
+                    ? isTrashFolder
+                      ? 'bg-red-200 text-red-800'
+                      : 'bg-blue-200 text-blue-800'
+                    : 'bg-gray-200 text-gray-600 group-hover:bg-gray-300/60'
+                }`}
+              >
+                {folder.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="p-4 border-t border-gray-100">
+        <button
+          id="btn-logout"
+          onClick={onLogout}
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm text-red-600 hover:bg-red-50/50 hover:text-red-700 transition-all cursor-pointer group font-medium"
+        >
+          <div className="flex items-center gap-3">
+            <LogOut className="w-4 h-4 stroke-[1.75] text-red-500 group-hover:text-red-600" />
+            <span>Déconnexion</span>
+          </div>
+        </button>
+      </div>
+    </aside>
   );
 }
