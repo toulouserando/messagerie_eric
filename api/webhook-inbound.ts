@@ -1,14 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialisation du client Supabase avec la clé Service Role pour écrire en BDD
+// Initialisation du client Supabase avec la Service Role Key (nécessaire pour lire/écrire)
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Extraction propre de l'adresse e-mail (ex: "John Doe <john@example.com>" => "john@example.com")
+function extractEmail(rawEmail: string): string {
+  if (!rawEmail) return '';
+  const match = rawEmail.match(/<([^>]+)>/);
+  return (match ? match[1] : rawEmail).trim().toLowerCase();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // 1. Autoriser uniquement la méthode POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Méthode non autorisée' });
   }
@@ -16,52 +22,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const payload = req.body;
 
-    // 2. Vérifier que l'événement est bien "email.received"
-    if (payload.type !== 'email.received') {
+    if (payload?.type !== 'email.received') {
       return res.status(200).json({ message: 'Événement ignoré (non email.received)' });
     }
 
-    const emailData = payload.data;
+    const emailData = payload.data || {};
+    const rawSender = emailData.from || '';
+    const cleanSender = extractEmail(rawSender);
 
-    // Extraction des données de l'e-mail
-    const expediteur = emailData.from || '';
-    const destinataire = Array.isArray(emailData.to) ? emailData.to.join(', ') : (emailData.to || '');
+    if (!cleanSender) {
+      return res.status(400).json({ error: 'Adresse expéditeur manquante' });
+    }
+
+    // 1. VÉRIFICATION LISTE BLANCHE : L'expéditeur est-il dans contacts_uniques ?
+    const { data: contact, error: contactError } = await supabase
+      .from('contacts_uniques')
+      .select('email')
+      .eq('email', cleanSender)
+      .maybeSingle();
+
+    if (contactError) {
+      console.error('Erreur vérification contacts_uniques :', contactError.message);
+    }
+
+    // 2. Si le contact n'est PAS dans ta base, ON REJETTE LE MESSAGE (Anti-Spam)
+    if (!contact) {
+      console.log(`[Anti-Spam] Message bloqué de : ${cleanSender} (Absent de contacts_uniques)`);
+      return res.status(200).json({ status: 'ignored', reason: 'Expéditeur non autorisé' });
+    }
+
+    // 3. Contact autorisé : Enregistrement du message dans Supabase
+    const rawRecipient = Array.isArray(emailData.to) ? emailData.to[0] : (emailData.to || '');
+    const cleanRecipient = extractEmail(rawRecipient) || 'eric@ftstoulouse.online';
+
     const objet = emailData.subject || '(Sans objet)';
     const messageTxt = emailData.text || '';
-    const messageHtml = emailData.html || undefined;
+    const messageHtml = emailData.html || null;
 
-    // 3. Insertion de l'e-mail entrant dans Supabase
-    const { data, error } = await supabase.from('messages').insert([
+    const { data, error: insertError } = await supabase.from('messages').insert([
       {
-        sender_email: expediteur,
-        recipient_email: destinataire,
-        subject: objet,
-        body: messageTxt,
-        body_html: messageHtml,
-        theme: 'Général',
+        expediteur: cleanSender,
+        destinataire: cleanRecipient,
+        objet: objet,
+        message: messageTxt,
+        messageHtml: messageHtml,
+        dossier: 'Général',
         is_read: false,
-        is_archived: false,
+        masque: false,
         is_deleted: false,
+        date: new Date().toISOString(),
       },
     ]).select();
 
-    if (error) {
-      console.error('Erreur insertion Supabase Webhook :', error.message);
-      return res.status(500).json({ error: error.message });
+    if (insertError) {
+      console.error('Erreur insertion message :', insertError.message);
+      return res.status(500).json({ error: insertError.message });
     }
 
-    // 4. Mettre à jour la table des contacts uniques
-    if (expediteur) {
-      const emailOnly = expediteur.includes('<') 
-        ? expediteur.match(/<([^>]+)>/)?.[1] || expediteur 
-        : expediteur;
-
-      await supabase
-        .from('contacts_uniques')
-        .upsert({ email: emailOnly.trim().toLowerCase() }, { onConflict: 'email' });
-    }
-
+    console.log(`[Message Reçu] Mail de ${cleanSender} accepté et enregistré.`);
     return res.status(200).json({ success: true, inserted: data });
+
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
     console.error('Erreur serveur Webhook :', errorMessage);
