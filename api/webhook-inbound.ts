@@ -1,17 +1,41 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialisation du client Supabase avec la Service Role Key (nécessaire pour lire/écrire)
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// Extraction propre de l'adresse e-mail (ex: "John Doe <john@example.com>" => "john@example.com")
 function extractEmail(rawEmail: string): string {
   if (!rawEmail) return '';
   const match = rawEmail.match(/<([^>]+)>/);
   return (match ? match[1] : rawEmail).trim().toLowerCase();
+}
+
+// Fonction pour récupérer le contenu textuel du mail via l'API Resend
+async function fetchResendEmailBody(emailId: string): Promise<string> {
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY || '';
+  if (!apiKey || !emailId) return '';
+
+  try {
+    let res = await fetch(`https://api.resend.com/emails/received/${emailId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!res.ok) {
+      res = await fetch(`https://api.resend.com/emails/${emailId}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+    }
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.text || data.html || '';
+    }
+  } catch (e) {
+    console.error('Erreur lors de la récupération du corps de mail Resend :', e);
+  }
+  return '';
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -34,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Adresse expéditeur manquante' });
     }
 
-    // 1. VÉRIFICATION LISTE BLANCHE : L'expéditeur est-il dans contacts_uniques ?
+    // 1. Filtre liste blanche (contacts_uniques)
     const { data: contact, error: contactError } = await supabase
       .from('contacts_uniques')
       .select('email')
@@ -45,25 +69,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('Erreur vérification contacts_uniques :', contactError.message);
     }
 
-    // 2. Si le contact n'est PAS dans ta base, ON REJETTE LE MESSAGE (Anti-Spam)
     if (!contact) {
       console.log(`[Anti-Spam] Message bloqué de : ${cleanSender} (Absent de contacts_uniques)`);
       return res.status(200).json({ status: 'ignored', reason: 'Expéditeur non autorisé' });
     }
 
-    // 3. Contact autorisé : Enregistrement dans Supabase avec la structure SQL exacte
+    // 2. Extraction du corps du message
+    let messageBody = emailData.text || emailData.html || '';
+
+    // Si le corps est vide dans le payload du webhook, on interroge l'API Resend
+    if (!messageBody && emailData.email_id) {
+      messageBody = await fetchResendEmailBody(emailData.email_id);
+    }
+
     const rawRecipient = Array.isArray(emailData.to) ? emailData.to[0] : (emailData.to || '');
     const cleanRecipient = extractEmail(rawRecipient) || 'eric@ftstoulouse.online';
-
     const objet = emailData.subject || '(Sans objet)';
-    const messageTxt = emailData.text || emailData.html || '';
 
+    // 3. Insertion dans Supabase avec les noms de colonnes exacts
     const { data, error: insertError } = await supabase.from('messages').insert([
       {
         sender_email: cleanSender,
         recipient_email: cleanRecipient,
         subject: objet,
-        body: messageTxt,
+        body: messageBody || '(Message vide)',
         theme: 'Général',
         is_read: false,
         is_visible: true,
