@@ -59,7 +59,7 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
-  // AUTO-MARK AS READ: Marque automatiquement comme lu lors de la sélection
+  // AUTO-MARK AS READ : Marque automatiquement comme lu lors de la sélection
   useEffect(() => {
     if (!selectedMessageId) return;
 
@@ -165,30 +165,39 @@ export default function App() {
     }
   };
 
-const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
+  const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
+    const newReadStatus = !currentReadStatus;
+
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, is_read: newReadStatus } : m))
+    );
+
+    const { error } = await supabase.from('messages').update({ is_read: newReadStatus }).eq('id', id);
+    if (error) {
+      console.error('Erreur mise à jour statut lu / non lu :', error.message);
+    }
+  };
+
+  const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
     try {
-      // 1. TENTATIVE D'ENVOI VERS L'EXTÉRIEUR (RESEND)
-      const resendRes = await fetch('/api/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // 1. TENTATIVE D'ENVOI EXTERNE VIA EDGE FUNCTION (RESEND)
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('send-email', {
+        body: {
           to: newMsgData.destinataire,
           subject: newMsgData.objet,
-          text: newMsgData.message,
-        }),
+          html: `<p>${newMsgData.message.replace(/\n/g, '<br>')}</p>`,
+        },
       });
 
-      const resendData = await resendRes.json();
-
-      if (!resendRes.ok) {
-        console.error("❌ Échec de l'envoi externe (Resend) :", resendData);
-        alert(`Impossible d'envoyer l'e-mail externe : ${resendData.error?.message || JSON.stringify(resendData.error || resendData)}`);
-        return; // Stopper l'exécution si l'e-mail externe a échoué
+      if (edgeError) {
+        console.error("❌ Échec de l'envoi externe (Edge Function) :", edgeError);
+        alert(`Impossible d'envoyer l'e-mail externe : ${edgeError.message || JSON.stringify(edgeError)}`);
+        return;
       }
 
-      console.log("✅ E-mail transmis avec succès à Resend :", resendData);
+      console.log("✅ E-mail transmis avec succès via Edge Function :", edgeData);
 
-      // 2. ENREGISTREMENT INTERNE (SUPABASE)
+      // 2. ENREGISTREMENT INTERNE (SUPABASE BDD)
       const payload = {
         sender_email: MY_EMAIL,
         recipient_email: newMsgData.destinataire,
@@ -299,6 +308,10 @@ const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expe
     setFilters(newFilters);
   };
 
+  const handleSelectMessage = (msg: Message) => {
+    setSelectedMessageId(msg.id);
+  };
+
   // --- LOGIQUE DE FILTRAGE DU DOSSIER CORRIGÉE ---
   const filterByFolder = (msg: Message, folderId: string) => {
     const folderKey = folderId.toLowerCase().trim();
@@ -322,12 +335,12 @@ const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expe
       return isSentByMe;
     }
 
-    // 4. TOUS LES MESSAGES (REÇUS ET ENVOYÉS VUS GLOBALEMENT)
+    // 4. TOUS LES MESSAGES
     if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
       return true;
     }
 
-    // 5. DOSSIERS THÉMATIQUES (Général, Sherpa, Home, etc.)
+    // 5. DOSSIERS THÉMATIQUES
     const msgDossierClean = (msg.dossier || 'Général').trim().toLowerCase();
     return msgDossierClean === folderKey;
   };
