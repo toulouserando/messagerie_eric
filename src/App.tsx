@@ -180,22 +180,53 @@ export default function App() {
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
     try {
-      // 1. TENTATIVE D'ENVOI EXTERNE VIA EDGE FUNCTION (RESEND)
-      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('send-email', {
-        body: {
-          to: newMsgData.destinataire,
-          subject: newMsgData.objet,
-          html: `<p>${newMsgData.message.replace(/\n/g, '<br>')}</p>`,
-        },
-      });
+      // 1. TENTATIVE D'ENVOI EXTERNE VIA LA ROUTE API RESEND (/api/send)
+      let sendSuccess = false;
+      let errorMessage = '';
 
-      if (edgeError) {
-        console.error("❌ Échec de l'envoi externe (Edge Function) :", edgeError);
-        alert(`Impossible d'envoyer l'e-mail externe : ${edgeError.message || JSON.stringify(edgeError)}`);
-        return;
+      try {
+        const response = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: newMsgData.destinataire,
+            subject: newMsgData.objet,
+            text: newMsgData.message,
+            html: `<p>${newMsgData.message.replace(/\n/g, '<br>')}</p>`,
+          }),
+        });
+
+        const resData = await response.json();
+
+        if (response.ok) {
+          sendSuccess = true;
+          console.log("✅ E-mail transmis avec succès à Resend :", resData);
+        } else {
+          errorMessage = resData.error?.message || resData.error || 'Erreur inconnue lors de l\'envoi via Vercel API.';
+        }
+      } catch (apiErr: unknown) {
+        // En cas de secours : tentative via Supabase Edge Function si la route API Vercel n'existe pas
+        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('send-email', {
+          body: {
+            to: newMsgData.destinataire,
+            subject: newMsgData.objet,
+            html: `<p>${newMsgData.message.replace(/\n/g, '<br>')}</p>`,
+          },
+        });
+
+        if (!edgeError) {
+          sendSuccess = true;
+          console.log("✅ E-mail transmis avec succès via Edge Function :", edgeData);
+        } else {
+          errorMessage = edgeError.message || 'Impossible de joindre le serveur d\'envoi.';
+        }
       }
 
-      console.log("✅ E-mail transmis avec succès via Edge Function :", edgeData);
+      if (!sendSuccess) {
+        console.error("❌ Échec de l'envoi externe :", errorMessage);
+        alert(`Impossible d'envoyer l'e-mail externe : ${errorMessage}`);
+        return; // Stopper l'exécution si l'envoi externe a échoué
+      }
 
       // 2. ENREGISTREMENT INTERNE (SUPABASE BDD)
       const payload = {
@@ -243,9 +274,10 @@ export default function App() {
         setSelectedMessageId(newMsg.id);
         setSelectedFolderId('envoyes');
       }
-    } catch (err: any) {
-      console.error("Erreur lors de l'exécution de l'envoi :", err.message);
-      alert(`Erreur réseau/client : ${err.message}`);
+    } catch (err: unknown) {
+      const errMessage = err instanceof Error ? err.message : 'Erreur inconnue';
+      console.error("Erreur lors de l'exécution de l'envoi :", errMessage);
+      alert(`Erreur réseau/client : ${errMessage}`);
     }
   };
 
