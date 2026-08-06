@@ -12,6 +12,52 @@ function extractEmail(rawEmail: string): string {
   return (match ? match[1] : rawEmail).trim().toLowerCase();
 }
 
+// Récupération du corps du mail via l'API Resend Inbound
+async function fetchResendEmailBody(emailId: string): Promise<{ body: string; errorLog: string }> {
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY || '';
+
+  if (!apiKey) {
+    return { body: '', errorLog: 'RESEND_API_KEY absente des variables d’environnement Vercel' };
+  }
+
+  const endpoints = [
+    `https://api.resend.com/emails/received/${emailId}`,
+    `https://api.resend.com/emails/receiving/${emailId}`,
+    `https://api.resend.com/emails/${emailId}`
+  ];
+
+  let lastError = '';
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const content = data.text || data.html || data.data?.text || data.data?.html || '';
+        if (content) {
+          return { body: content, errorLog: '' };
+        }
+        lastError = `Statut 200 mais aucun contenu trouvé dans : ${JSON.stringify(data)}`;
+      } else {
+        const errText = await res.text();
+        lastError = `HTTP ${res.status} sur ${url} -> ${errText}`;
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      lastError = `Erreur réseau sur ${url} : ${msg}`;
+    }
+  }
+
+  return { body: '', errorLog: lastError };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Méthode non autorisée' });
@@ -48,8 +94,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ status: 'ignored', reason: 'Expéditeur non autorisé' });
     }
 
-    // 2. Extraction du corps du message directement depuis le payload
-    const messageBody = emailData.text || emailData.html || payload.text || payload.html || '(Message sans texte)';
+    // 2. Extraction du corps du message
+    let messageBody = emailData.text || emailData.html || payload.text || payload.html || '';
+    const emailId = emailData.email_id || emailData.id || payload.email_id || payload.id;
+
+    if (!messageBody && emailId) {
+      const result = await fetchResendEmailBody(emailId);
+      messageBody = result.body;
+      if (!messageBody) {
+        messageBody = `(Message vide - ${result.errorLog})`;
+      }
+    }
 
     const rawRecipient = Array.isArray(emailData.to) ? emailData.to[0] : (emailData.to || '');
     const cleanRecipient = extractEmail(rawRecipient) || 'eric@ftstoulouse.online';
@@ -61,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sender_email: cleanSender,
         recipient_email: cleanRecipient,
         subject: objet,
-        body: messageBody,
+        body: messageBody || '(Message vide)',
         theme: 'Général',
         is_read: false,
         is_visible: true,
