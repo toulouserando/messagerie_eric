@@ -2,15 +2,18 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 
-// Initialisation des SDKs côté serveur
+// Initialisation des SDKs
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Domaine autorisé et vérifié chez Resend
+// Domaine autorisé et vérifié chez Resend pour la couche de transport
 const VERIFIED_SENDER_EMAIL = 'eric@ftstoulouse.online';
+
+// Adresse identifiant utilisateur Supabase par défaut
+const DEFAULT_ACCOUNT_EMAIL = 'ericgalaxy5@free.fr';
 
 // Fonction utilitaire pour transformer des chaînes ou tableaux en liste d'emails nettoyés
 const parseEmailList = (input: string | string[] | undefined): string[] => {
@@ -46,6 +49,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { to, cc, bcc, subject, text, message, expediteur, dossier } = req.body;
     const bodyText = text || message || '';
 
+    // Définition de l'adresse de compte
+    const userAccountEmail = expediteur || DEFAULT_ACCOUNT_EMAIL;
+
     // Extraction et nettoyage des adresses e-mails
     const toList = parseEmailList(to);
     const ccList = parseEmailList(cc);
@@ -60,17 +66,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ÉTAPE 1 : ENVOI EXTERNE VIA RESEND
     // -------------------------------------------------------------
     const resendPayload: Parameters<typeof resend.emails.send>[0] = {
-      from: `Eric <${VERIFIED_SENDER_EMAIL}>`, // Toujours l'adresse vérifiée
+      from: `Eric <${VERIFIED_SENDER_EMAIL}>`, // Adresse DNS vérifiée obligatoire chez Resend
+      replyTo: userAccountEmail,                 // Redirige les réponses directement vers ericgalaxy5@free.fr
       to: toList.length > 0 ? toList : [VERIFIED_SENDER_EMAIL],
       subject: subject || '(Sans objet)',
       text: bodyText,
       html: `<p>${bodyText.replace(/\n/g, '<br>')}</p>`,
     };
-
-    // Si un expediteur alternatif est fourni, on le place en Reply-To
-    if (expediteur && expediteur !== VERIFIED_SENDER_EMAIL) {
-      resendPayload.replyTo = expediteur;
-    }
 
     if (ccList.length > 0) resendPayload.cc = ccList;
     if (bccList.length > 0) resendPayload.bcc = bccList;
@@ -95,7 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('messages')
       .insert([
         {
-          sender_email: VERIFIED_SENDER_EMAIL,
+          sender_email: userAccountEmail, // Enregistré sous l'identité ericgalaxy5@free.fr
           recipient_email: recipientEmail || 'Copie cachée',
           cc_email: ccEmail || null,
           bcc_email: bccEmail || null,

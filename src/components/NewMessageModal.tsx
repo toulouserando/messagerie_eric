@@ -7,7 +7,7 @@ import { supabase } from '../supabaseClient';
 interface NewMessageModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSendMessage: (messageData: Omit<Message, 'id' | 'date' | 'expediteur'> & { cc?: string; bcc?: string }) => void;
+  onSendMessage: (messageData: Omit<Message, 'id' | 'date' | 'expediteur'> & { cc?: string; bcc?: string; expediteur?: string }) => void;
   initialData?: {
     destinataire?: string;
     objet?: string;
@@ -21,8 +21,8 @@ export default function NewMessageModal({
   onSendMessage,
   initialData = {},
 }: NewMessageModalProps) {
-  // Récupération dynamique depuis la variable d'environnement Vite
-  const MY_EMAIL = import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online';
+  // Identifiant de votre compte / messagerie Supabase
+  const MY_ACCOUNT_EMAIL = import.meta.env.VITE_SENDER_EMAIL || 'ericgalaxy5@free.fr';
 
   const [destinataire, setDestinataire] = useState('');
   const [cc, setCc] = useState('');
@@ -139,6 +139,7 @@ export default function NewMessageModal({
 
     // --- ENVOI ---
     onSendMessage({
+      expediteur: MY_ACCOUNT_EMAIL,
       destinataire: destinataire.trim(),
       cc: cc.trim() || undefined,
       bcc: bcc.trim() || undefined,
@@ -207,7 +208,7 @@ export default function NewMessageModal({
               </div>
               <input
                 type="text"
-                value={MY_EMAIL}
+                value={MY_ACCOUNT_EMAIL}
                 readOnly
                 disabled
                 className="block w-full pl-9 pr-4 py-2.5 text-sm bg-gray-100 border border-gray-200 rounded-lg text-gray-600 font-medium select-none cursor-not-allowed"
@@ -244,7 +245,7 @@ export default function NewMessageModal({
                 <button
                   type="button"
                   onClick={() => {
-                    setDestinataire(MY_EMAIL);
+                    setDestinataire(MY_ACCOUNT_EMAIL);
                     if (errorMessage) setErrorMessage(null);
                   }}
                   className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer ml-1"
@@ -272,7 +273,7 @@ export default function NewMessageModal({
               />
 
               <datalist id="contacts-list">
-                <option value={MY_EMAIL} />
+                <option value={MY_ACCOUNT_EMAIL} />
                 {contactSuggestions.map((email) => (
                   <option key={email} value={email} />
                 ))}
