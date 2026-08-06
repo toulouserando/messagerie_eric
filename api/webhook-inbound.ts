@@ -12,30 +12,49 @@ function extractEmail(rawEmail: string): string {
   return (match ? match[1] : rawEmail).trim().toLowerCase();
 }
 
-// Récupération du contenu textuel du mail via l'API Resend
-async function fetchResendEmailBody(emailId: string): Promise<string> {
+// Récupération du contenu textuel du mail via l'API Resend avec diagnostic d'erreur
+async function fetchResendEmailBody(emailId: string): Promise<{ body: string; errorLog: string }> {
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY || '';
-  if (!apiKey || !emailId) return '';
 
-  try {
-    let res = await fetch(`https://api.resend.com/emails/received/${emailId}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-
-    if (!res.ok) {
-      res = await fetch(`https://api.resend.com/emails/${emailId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-    }
-
-    if (res.ok) {
-      const data = await res.json();
-      return data.text || data.html || '';
-    }
-  } catch (e) {
-    console.error('Erreur lors de la récupération du corps de mail Resend :', e);
+  if (!apiKey) {
+    return { body: '', errorLog: 'Erreur: RESEND_API_KEY non lue sur Vercel' };
   }
-  return '';
+
+  const endpoints = [
+    `https://api.resend.com/emails/received/${emailId}`,
+    `https://api.resend.com/emails/${emailId}`
+  ];
+
+  let lastError = '';
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const content = data.text || data.html || data.data?.text || data.data?.html || '';
+        if (content) {
+          return { body: content, errorLog: '' };
+        }
+        lastError = `Statut 200 OK mais aucun champ text/html trouvé dans l'API`;
+      } else {
+        const errText = await res.text();
+        lastError = `HTTP ${res.status} sur ${url} -> ${errText}`;
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      lastError = `Exception réseau sur ${url} : ${msg}`;
+    }
+  }
+
+  return { body: '', errorLog: lastError };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -78,16 +97,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let messageBody = emailData.text || emailData.html || '';
     const emailId = emailData.email_id || emailData.id || payload.data?.email_id || payload.data?.id;
 
-    // Si le corps est vide dans le payload du webhook, on interroge l'API Resend
     if (!messageBody && emailId) {
-      messageBody = await fetchResendEmailBody(emailId);
+      const result = await fetchResendEmailBody(emailId);
+      messageBody = result.body;
+      if (!messageBody) {
+        messageBody = `(Message vide - ${result.errorLog})`;
+      }
     }
 
     const rawRecipient = Array.isArray(emailData.to) ? emailData.to[0] : (emailData.to || '');
     const cleanRecipient = extractEmail(rawRecipient) || 'eric@ftstoulouse.online';
     const objet = emailData.subject || '(Sans objet)';
 
-    // 3. Insertion dans Supabase avec les noms de colonnes exacts
+    // 3. Insertion dans Supabase avec la structure SQL exacte
     const { data, error: insertError } = await supabase.from('messages').insert([
       {
         sender_email: cleanSender,
