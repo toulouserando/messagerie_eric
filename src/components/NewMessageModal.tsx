@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Send, User, Tag, AlertCircle, EyeOff } from 'lucide-react';
+import { X, Send, User, Tag, AlertCircle, EyeOff, Mail } from 'lucide-react';
 import { Message } from '../types';
 import { supabase } from '../supabaseClient';
 
@@ -196,6 +196,25 @@ export default function NewMessageModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Champ Expéditeur (Lecture seule) */}
+          <div className="space-y-1">
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
+              De (Expéditeur)
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <Mail className="w-4 h-4 stroke-[1.75]" />
+              </div>
+              <input
+                type="text"
+                value={MY_EMAIL}
+                readOnly
+                disabled
+                className="block w-full pl-9 pr-4 py-2.5 text-sm bg-gray-100 border border-gray-200 rounded-lg text-gray-600 font-medium select-none cursor-not-allowed"
+              />
+            </div>
+          </div>
+
           {/* Destinataire principal */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">

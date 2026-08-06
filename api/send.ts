@@ -9,6 +9,9 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUP
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Domaine autorisé et vérifié chez Resend
+const VERIFIED_SENDER_EMAIL = 'eric@ftstoulouse.online';
+
 // Fonction utilitaire pour transformer des chaînes ou tableaux en liste d'emails nettoyés
 const parseEmailList = (input: string | string[] | undefined): string[] => {
   if (!input) return [];
@@ -42,7 +45,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { to, cc, bcc, subject, text, message, expediteur, dossier } = req.body;
     const bodyText = text || message || '';
-    const senderEmail = expediteur || 'eric@ftstoulouse.online';
 
     // Extraction et nettoyage des adresses e-mails
     const toList = parseEmailList(to);
@@ -58,12 +60,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ÉTAPE 1 : ENVOI EXTERNE VIA RESEND
     // -------------------------------------------------------------
     const resendPayload: Parameters<typeof resend.emails.send>[0] = {
-      from: `Eric <${senderEmail}>`,
-      to: toList.length > 0 ? toList : [senderEmail], // Si seul BCC est fourni, on met l'expéditeur en 'to'
+      from: `Eric <${VERIFIED_SENDER_EMAIL}>`, // Toujours l'adresse vérifiée
+      to: toList.length > 0 ? toList : [VERIFIED_SENDER_EMAIL],
       subject: subject || '(Sans objet)',
       text: bodyText,
       html: `<p>${bodyText.replace(/\n/g, '<br>')}</p>`,
     };
+
+    // Si un expediteur alternatif est fourni, on le place en Reply-To
+    if (expediteur && expediteur !== VERIFIED_SENDER_EMAIL) {
+      resendPayload.replyTo = expediteur;
+    }
 
     if (ccList.length > 0) resendPayload.cc = ccList;
     if (bccList.length > 0) resendPayload.bcc = bccList;
@@ -80,7 +87,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // -------------------------------------------------------------
     // ÉTAPE 2 : ENREGISTREMENT INTERNE DANS SUPABASE
     // -------------------------------------------------------------
-    // On conserve la totalité des destinataires au format texte séparé par des virgules pour la BDD
     const recipientEmail = toList.join(', ');
     const ccEmail = ccList.join(', ');
     const bccEmail = bccList.join(', ');
@@ -89,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('messages')
       .insert([
         {
-          sender_email: senderEmail,
+          sender_email: VERIFIED_SENDER_EMAIL,
           recipient_email: recipientEmail || 'Copie cachée',
           cc_email: ccEmail || null,
           bcc_email: bccEmail || null,
