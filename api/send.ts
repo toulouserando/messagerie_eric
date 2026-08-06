@@ -9,6 +9,18 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUP
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Fonction utilitaire pour transformer des chaînes ou tableaux en liste d'emails nettoyés
+const parseEmailList = (input: string | string[] | undefined): string[] => {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    return input.map((e) => e.trim()).filter(Boolean);
+  }
+  return input
+    .split(/[,;]+/)
+    .map((e) => e.trim())
+    .filter(Boolean);
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Gestion des en-têtes CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -28,45 +40,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { to, subject, text, message, expediteur } = req.body;
+    const { to, cc, bcc, subject, text, message, expediteur, dossier } = req.body;
     const bodyText = text || message || '';
     const senderEmail = expediteur || 'eric@ftstoulouse.online';
 
-    if (!to) {
-      return res.status(400).json({ error: 'Le champ destinataire (to) est requis.' });
+    // Extraction et nettoyage des adresses e-mails
+    const toList = parseEmailList(to);
+    const ccList = parseEmailList(cc);
+    const bccList = parseEmailList(bcc);
+
+    // Contrôle : il faut au moins un destinataire dans 'to' ou 'bcc'
+    if (toList.length === 0 && bccList.length === 0) {
+      return res.status(400).json({ error: 'Au moins un destinataire (to ou bcc) est requis.' });
     }
 
     // -------------------------------------------------------------
     // ÉTAPE 1 : ENVOI EXTERNE VIA RESEND
     // -------------------------------------------------------------
-    const { data: resendData, error: resendError } = await resend.emails.send({
-      from: 'Eric <eric@ftstoulouse.online>',
-      to: Array.isArray(to) ? to : [to],
+    const resendPayload: Parameters<typeof resend.emails.send>[0] = {
+      from: `Eric <${senderEmail}>`,
+      to: toList.length > 0 ? toList : [senderEmail], // Si seul BCC est fourni, on met l'expéditeur en 'to'
       subject: subject || '(Sans objet)',
       text: bodyText,
       html: `<p>${bodyText.replace(/\n/g, '<br>')}</p>`,
-    });
+    };
+
+    if (ccList.length > 0) resendPayload.cc = ccList;
+    if (bccList.length > 0) resendPayload.bcc = bccList;
+
+    const { data: resendData, error: resendError } = await resend.emails.send(resendPayload);
 
     if (resendError) {
       console.error('Erreur SDK Resend :', resendError);
-      return res.status(400).json({ 
-        error: `Échec d'envoi externe (Resend) : ${resendError.message}` 
+      return res.status(400).json({
+        error: `Échec d'envoi externe (Resend) : ${resendError.message}`,
       });
     }
 
     // -------------------------------------------------------------
     // ÉTAPE 2 : ENREGISTREMENT INTERNE DANS SUPABASE
     // -------------------------------------------------------------
-    const recipientEmail = Array.isArray(to) ? to[0] : to;
+    // On conserve la totalité des destinataires au format texte séparé par des virgules pour la BDD
+    const recipientEmail = toList.join(', ');
+    const ccEmail = ccList.join(', ');
+    const bccEmail = bccList.join(', ');
 
     const { data: dbData, error: dbError } = await supabase
       .from('messages')
       .insert([
         {
           sender_email: senderEmail,
-          recipient_email: recipientEmail,
+          recipient_email: recipientEmail || 'Copie cachée',
+          cc_email: ccEmail || null,
+          bcc_email: bccEmail || null,
           subject: subject || '(Sans objet)',
           body: bodyText,
+          folder: dossier || 'Divers',
           is_read: true,
         },
       ])
@@ -74,9 +103,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (dbError) {
       console.error('Erreur Supabase BDD :', dbError.message);
-      // L'e-mail est parti mais la BDD n'a pas pu être mise à jour
       return res.status(207).json({
-        warning: 'E-mail envoyé vers l\'extérieur mais échec d\'enregistrement en BDD',
+        warning: "E-mail envoyé vers l'extérieur mais échec d'enregistrement en BDD",
         resend: resendData,
         dbError: dbError.message,
       });
@@ -85,21 +113,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // -------------------------------------------------------------
     // ÉTAPE 3 : MISE À JOUR SILENCIEUSE DES CONTACTS
     // -------------------------------------------------------------
-    await supabase
-      .from('contacts_uniques')
-      .upsert({ email: recipientEmail }, { onConflict: 'email' });
+    const allContacts = Array.from(new Set([...toList, ...ccList, ...bccList]));
+    if (allContacts.length > 0) {
+      const contactsToUpsert = allContacts.map((email) => ({ email }));
+      await supabase
+        .from('contacts_uniques')
+        .upsert(contactsToUpsert, { onConflict: 'email' });
+    }
 
-    // Succès complet (externe + interne)
+    // Succès complet
     return res.status(200).json({
       success: true,
       resend: resendData,
       messageRecord: dbData?.[0] || null,
     });
-
   } catch (error: any) {
     console.error('Erreur interne serveur :', error);
-    return res.status(500).json({ 
-      error: error.message || 'Erreur interne du serveur lors de la procédure d\'envoi' 
+    return res.status(500).json({
+      error: error.message || "Erreur interne du serveur lors de la procédure d'envoi",
     });
   }
 }

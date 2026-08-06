@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Send, User, Tag, AlertCircle } from 'lucide-react';
+import { X, Send, User, Tag, AlertCircle, EyeOff } from 'lucide-react';
 import { Message } from '../types';
 import { supabase } from '../supabaseClient';
 
 interface NewMessageModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSendMessage: (messageData: Omit<Message, 'id' | 'date' | 'expediteur'>) => void;
+  onSendMessage: (messageData: Omit<Message, 'id' | 'date' | 'expediteur'> & { cc?: string; bcc?: string }) => void;
   initialData?: {
     destinataire?: string;
     objet?: string;
@@ -25,6 +25,12 @@ export default function NewMessageModal({
   const MY_EMAIL = import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online';
 
   const [destinataire, setDestinataire] = useState('');
+  const [cc, setCc] = useState('');
+  const [bcc, setBcc] = useState('');
+  
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
+
   const [objet, setObjet] = useState('');
   const [message, setMessage] = useState('');
   const [computedFolder, setComputedFolder] = useState('Divers');
@@ -65,6 +71,10 @@ export default function NewMessageModal({
   useEffect(() => {
     if (isOpen) {
       setDestinataire(initialData.destinataire || '');
+      setCc('');
+      setBcc('');
+      setShowCc(false);
+      setShowBcc(false);
       setObjet(initialData.objet || '');
       setMessage(initialData.message || '');
       setErrorMessage(null); // Réinitialise les alertes à l'ouverture
@@ -75,20 +85,45 @@ export default function NewMessageModal({
     setComputedFolder(extractFolder(objet));
   }, [objet]);
 
+  // Utilitaire de validation d'une liste d'e-mails
+  const validateEmails = (emailsString: string): { isValid: boolean; invalidEmail?: string; count: number } => {
+    if (!emailsString.trim()) return { isValid: true, count: 0 };
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const list = emailsString.split(/[,;]+/).map((e) => e.trim()).filter(Boolean);
+    const invalid = list.find((e) => !emailRegex.test(e));
+    return {
+      isValid: !invalid,
+      invalidEmail: invalid,
+      count: list.length,
+    };
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
     // --- CONTRÔLES DE VALIDATION ---
-    if (!destinataire.trim()) {
-      setErrorMessage('Veuillez indiquer un destinataire.');
+    const destValidation = validateEmails(destinataire);
+    const ccValidation = validateEmails(cc);
+    const bccValidation = validateEmails(bcc);
+
+    if (destValidation.count === 0 && bccValidation.count === 0) {
+      setErrorMessage('Veuillez indiquer au moins un destinataire principal ou en copie cachée (CCI).');
       return;
     }
 
-    // Validation du format email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(destinataire.trim())) {
-      setErrorMessage("L'adresse e-mail du destinataire n'est pas valide.");
+    if (!destValidation.isValid) {
+      setErrorMessage(`L'adresse e-mail "${destValidation.invalidEmail}" dans le champ Destinataire n'est pas valide.`);
+      return;
+    }
+
+    if (!ccValidation.isValid) {
+      setErrorMessage(`L'adresse e-mail "${ccValidation.invalidEmail}" dans le champ Cc n'est pas valide.`);
+      return;
+    }
+
+    if (!bccValidation.isValid) {
+      setErrorMessage(`L'adresse e-mail "${bccValidation.invalidEmail}" dans le champ CCI n'est pas valide.`);
       return;
     }
 
@@ -105,6 +140,8 @@ export default function NewMessageModal({
     // --- ENVOI ---
     onSendMessage({
       destinataire: destinataire.trim(),
+      cc: cc.trim() || undefined,
+      bcc: bcc.trim() || undefined,
       objet: objet.trim(),
       message: message.trim(),
       dossier: computedFolder,
@@ -114,6 +151,8 @@ export default function NewMessageModal({
 
     // Reset des champs
     setDestinataire('');
+    setCc('');
+    setBcc('');
     setObjet('');
     setMessage('');
     setErrorMessage(null);
@@ -157,24 +196,43 @@ export default function NewMessageModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Destinataire */}
+          {/* Destinataire principal */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <label htmlFor="input-destinataire" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
-                Destinataire <span className="text-red-500">*</span>
+                Destinataire(s) <span className="text-red-500">*</span>
               </label>
 
-              {/* Bouton raccourci pour s'envoyer à soi-même */}
-              <button
-                type="button"
-                onClick={() => {
-                  setDestinataire(MY_EMAIL);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-              >
-                + M'écrire à moi-même
-              </button>
+              <div className="flex items-center gap-2">
+                {!showCc && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCc(true)}
+                    className="text-[11px] font-semibold text-gray-500 hover:text-gray-800 hover:underline cursor-pointer"
+                  >
+                    + Cc
+                  </button>
+                )}
+                {!showBcc && (
+                  <button
+                    type="button"
+                    onClick={() => setShowBcc(true)}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                  >
+                    + CCI (Caché)
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDestinataire(MY_EMAIL);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer ml-1"
+                >
+                  + M'écrire à moi-même
+                </button>
+              </div>
             </div>
 
             <div className="relative">
@@ -183,7 +241,7 @@ export default function NewMessageModal({
               </div>
               <input
                 id="input-destinataire"
-                type="email"
+                type="text"
                 list="contacts-list"
                 value={destinataire}
                 onChange={(e) => {
@@ -194,7 +252,6 @@ export default function NewMessageModal({
                 className="block w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
               />
 
-              {/* Suggestions automatiques dynamiques issues de Supabase */}
               <datalist id="contacts-list">
                 <option value={MY_EMAIL} />
                 {contactSuggestions.map((email) => (
@@ -203,6 +260,66 @@ export default function NewMessageModal({
               </datalist>
             </div>
           </div>
+
+          {/* Champ Cc (Copie conforme) */}
+          {showCc && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label htmlFor="input-cc" className="block text-xs font-bold text-gray-500 uppercase tracking-tighter">
+                  Copie conforme (Cc)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCc('');
+                    setShowCc(false);
+                  }}
+                  className="text-[11px] text-gray-400 hover:text-gray-600 cursor-pointer"
+                >
+                  Masquer
+                </button>
+              </div>
+              <input
+                id="input-cc"
+                type="text"
+                list="contacts-list"
+                value={cc}
+                onChange={(e) => setCc(e.target.value)}
+                placeholder="contact1@domaine.com, contact2@domaine.com"
+                className="block w-full px-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
+              />
+            </div>
+          )}
+
+          {/* Champ CCI (Copie cachée) */}
+          {showBcc && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label htmlFor="input-bcc" className="block text-xs font-bold text-blue-600 uppercase tracking-tighter flex items-center gap-1">
+                  <EyeOff className="w-3.5 h-3.5 inline" /> Copie Cachée (CCI)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBcc('');
+                    setShowBcc(false);
+                  }}
+                  className="text-[11px] text-gray-400 hover:text-gray-600 cursor-pointer"
+                >
+                  Masquer
+                </button>
+              </div>
+              <input
+                id="input-bcc"
+                type="text"
+                list="contacts-list"
+                value={bcc}
+                onChange={(e) => setBcc(e.target.value)}
+                placeholder="Les destinataires CCI ne verront pas les adresses des autres"
+                className="block w-full px-4 py-2 text-sm bg-blue-50/50 border border-blue-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900 placeholder:text-gray-400"
+              />
+            </div>
+          )}
 
           {/* Objet */}
           <div className="space-y-1">
