@@ -26,6 +26,11 @@ export default function Sidebar({
     return MY_EMAILS.includes(sender);
   };
 
+  const isToMe = (msg: Message) => {
+    const recipient = (msg.destinataire || '').toLowerCase().trim();
+    return MY_EMAILS.includes(recipient);
+  };
+
   const trashMessages = messages.filter((m) => m.is_deleted === true);
   const activeMessages = messages.filter((m) => !m.is_deleted);
 
@@ -37,10 +42,15 @@ export default function Sidebar({
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
 
-    // Génère les dossiers thématiques sur TOUS les messages visibles
+    // Compte uniquement les messages REÇUS (ou auto-envoyés) pour les dossiers thématiques
     visibleMessages.forEach((msg) => {
-      const folderName = (msg.dossier || 'Général').trim();
-      foldersMap.set(folderName, (foldersMap.get(folderName) || 0) + 1);
+      const sent = isSentByMe(msg);
+      const toMe = isToMe(msg);
+
+      if (!sent || toMe) {
+        const folderName = (msg.dossier || 'Général').trim();
+        foldersMap.set(folderName, (foldersMap.get(folderName) || 0) + 1);
+      }
     });
 
     const customFolderList: Folder[] = [];

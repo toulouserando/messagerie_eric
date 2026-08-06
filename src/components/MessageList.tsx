@@ -34,7 +34,10 @@ export default function MessageList({
       const isHidden = msg.masque === true || msg.is_visible === false;
       const isDeleted = msg.is_deleted === true;
       const expediteur = (msg.expediteur || '').toLowerCase().trim();
+      const destinataire = (msg.destinataire || '').toLowerCase().trim();
+      
       const isSentByMe = MY_EMAILS.includes(expediteur);
+      const isToMe = MY_EMAILS.includes(destinataire);
       const folderKey = selectedFolderId.toLowerCase().trim();
 
       // 1. Corbeille
@@ -45,17 +48,22 @@ export default function MessageList({
       if (folderKey === 'masques' || folderKey === 'messages masqués' || folderKey === 'archived') return isHidden;
       if (isHidden) return false;
 
-      // 3. Messages envoyés
+      // 3. Messages envoyés (tout ce qui part de mes adresses)
       if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') return isSentByMe;
 
-      // 4. Tous les messages (affiche la totalité des e-mails actifs)
+      // 4. Tous les messages (la totalité des e-mails non supprimés et non masqués)
       if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
         return true;
       }
 
-      // 5. Filtrage par dossier thématique (ex: Général, Sherpa, Home, etc.)
+      // 5. Dossiers thématiques (ex: Général, Sherpa, Home)
+      // Un dossier de boîte de réception ne contient QUE les messages reçus (ou auto-envoyés)
       const currentFolder = (msg.dossier || 'Général').trim().toLowerCase();
-      return currentFolder === folderKey;
+      if (currentFolder === folderKey) {
+        return !isSentByMe || isToMe;
+      }
+
+      return false;
     });
 
     if (!searchQuery.trim()) return folderFiltered;
@@ -158,7 +166,8 @@ ${textContent}
               const isHidden = msg.masque === true || msg.is_visible === false;
               const isUnread = !msg.is_read;
               const expediteur = (msg.expediteur || '').toLowerCase().trim();
-              const isSentFolder = selectedFolderId.toLowerCase() === 'envoyes' || MY_EMAILS.includes(expediteur);
+              const destinataire = (msg.destinataire || '').toLowerCase().trim();
+              const isSentFolder = selectedFolderId.toLowerCase() === 'envoyes' || (MY_EMAILS.includes(expediteur) && !MY_EMAILS.includes(destinataire));
 
               return (
                 <motion.div
