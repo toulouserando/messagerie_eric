@@ -12,7 +12,7 @@ function extractEmail(rawEmail: string): string {
   return (match ? match[1] : rawEmail).trim().toLowerCase();
 }
 
-// Fonction pour récupérer le contenu textuel du mail via l'API Resend
+// Récupération du contenu textuel du mail via l'API Resend
 async function fetchResendEmailBody(emailId: string): Promise<string> {
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY || '';
   if (!apiKey || !emailId) return '';
@@ -76,10 +76,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 2. Extraction du corps du message
     let messageBody = emailData.text || emailData.html || '';
+    const emailId = emailData.email_id || emailData.id || payload.data?.email_id || payload.data?.id;
 
     // Si le corps est vide dans le payload du webhook, on interroge l'API Resend
-    if (!messageBody && emailData.email_id) {
-      messageBody = await fetchResendEmailBody(emailData.email_id);
+    if (!messageBody && emailId) {
+      messageBody = await fetchResendEmailBody(emailId);
     }
 
     const rawRecipient = Array.isArray(emailData.to) ? emailData.to[0] : (emailData.to || '');
