@@ -51,26 +51,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ status: 'ignored', reason: 'Expéditeur non autorisé' });
     }
 
-    // 3. Contact autorisé : Enregistrement du message dans Supabase
+    // 3. Contact autorisé : Enregistrement dans Supabase avec la structure SQL exacte
     const rawRecipient = Array.isArray(emailData.to) ? emailData.to[0] : (emailData.to || '');
     const cleanRecipient = extractEmail(rawRecipient) || 'eric@ftstoulouse.online';
 
     const objet = emailData.subject || '(Sans objet)';
-    const messageTxt = emailData.text || '';
-    const messageHtml = emailData.html || null;
+    const messageTxt = emailData.text || emailData.html || '';
 
     const { data, error: insertError } = await supabase.from('messages').insert([
       {
-        expediteur: cleanSender,
-        destinataire: cleanRecipient,
-        objet: objet,
-        message: messageTxt,
-        messageHtml: messageHtml,
-        dossier: 'Général',
+        sender_email: cleanSender,
+        recipient_email: cleanRecipient,
+        subject: objet,
+        body: messageTxt,
+        theme: 'Général',
         is_read: false,
-        masque: false,
+        is_visible: true,
         is_deleted: false,
-        date: new Date().toISOString(),
       },
     ]).select();
 
