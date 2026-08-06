@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import './App.css';
 import { Message } from './types';
 import LoginScreen from './components/LoginScreen';
@@ -15,7 +15,10 @@ import SearchBar, { AdvancedFilters } from './components/SearchBar';
 import KeywordPagesView from './components/KeywordPagesView';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
-import { FileText, Mail, Trash2, Printer, Download } from 'lucide-react';
+import { FileText, Mail, Trash2, Printer, Download, RefreshCw } from 'lucide-react';
+
+// Email de l'expéditeur principal (normalisé hors du composant)
+const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -32,9 +35,6 @@ export default function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>('tous');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
-
-  // Email de l'expéditeur principal (normalisé)
-  const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
 
   // ÉTATS DE RECHERCHE & FILTRES
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,26 +53,10 @@ export default function App() {
     message?: string;
   }>({});
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchMessages();
-    }
-  }, [isAuthenticated]);
-
-  // AUTO-MARK AS READ : Marque automatiquement comme lu lors de la sélection
-  useEffect(() => {
-    if (!selectedMessageId) return;
-
-    const currentMsg = messages.find((m) => m.id === selectedMessageId);
-    if (currentMsg && currentMsg.is_read === false) {
-      const timer = setTimeout(() => {
-        markAsRead(selectedMessageId);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedMessageId, messages]);
-
-  const fetchMessages = async () => {
+  // ---------------------------------------------------------------------------
+  // CHARGEMENT DES MESSAGES (Supabase)
+  // ---------------------------------------------------------------------------
+  const fetchMessages = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('messages')
@@ -98,15 +82,65 @@ export default function App() {
 
       setMessages(formattedMessages);
 
-      // Sélectionner le 1er message visible (non supprimé et non masqué)
-      const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
-      if (visible.length > 0 && !selectedMessageId) {
-        setSelectedMessageId(visible[0].id);
-      }
+      // Sélectionner le 1er message visible (non supprimé et non masqué) si aucun n'est sélectionné
+      setSelectedMessageId((prevId) => {
+        if (prevId) return prevId;
+        const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
+        return visible.length > 0 ? visible[0].id : null;
+      });
     }
     setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchMessages();
+    }
+  }, [isAuthenticated, fetchMessages]);
+
+  // ---------------------------------------------------------------------------
+  // GESTION DU STATUT LU / NON LU
+  // ---------------------------------------------------------------------------
+  const markAsRead = useCallback(async (id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, is_read: true } : m))
+    );
+
+    const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', id);
+    if (error) {
+      console.error('Erreur mise à jour statut lu :', error.message);
+    }
+  }, []);
+
+  // AUTO-MARK AS READ : Marque automatiquement comme lu lors de la sélection
+  useEffect(() => {
+    if (!selectedMessageId) return;
+
+    const currentMsg = messages.find((m) => m.id === selectedMessageId);
+    if (currentMsg && !currentMsg.is_read) {
+      const timer = setTimeout(() => {
+        markAsRead(selectedMessageId);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedMessageId, messages, markAsRead]);
+
+  const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
+    const newReadStatus = !currentReadStatus;
+
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, is_read: newReadStatus } : m))
+    );
+
+    const { error } = await supabase.from('messages').update({ is_read: newReadStatus }).eq('id', id);
+    if (error) {
+      console.error('Erreur mise à jour statut lu / non lu :', error.message);
+    }
   };
 
+  // ---------------------------------------------------------------------------
+  // AUTHENTIFICATION ET MODALES
+  // ---------------------------------------------------------------------------
   const handleLoginSuccess = () => {
     localStorage.setItem('sherpa_authenticated', 'true');
     setIsAuthenticated(true);
@@ -144,6 +178,9 @@ export default function App() {
     setIsComposeOpen(true);
   };
 
+  // ---------------------------------------------------------------------------
+  // ACTIONS SUR LES MESSAGES (Masquer, Supprimer, Restaurer, Envoyer)
+  // ---------------------------------------------------------------------------
   const handleToggleHideMessage = async (id: string, currentStatus: boolean) => {
     const newStatus = !currentStatus;
 
@@ -152,30 +189,6 @@ export default function App() {
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, masque: newStatus } : m))
     );
-  };
-
-  const markAsRead = async (id: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, is_read: true } : m))
-    );
-
-    const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', id);
-    if (error) {
-      console.error('Erreur mise à jour statut lu :', error.message);
-    }
-  };
-
-  const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
-    const newReadStatus = !currentReadStatus;
-
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, is_read: newReadStatus } : m))
-    );
-
-    const { error } = await supabase.from('messages').update({ is_read: newReadStatus }).eq('id', id);
-    if (error) {
-      console.error('Erreur mise à jour statut lu / non lu :', error.message);
-    }
   };
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
@@ -203,10 +216,12 @@ export default function App() {
 
       console.log("✅ Message traité par l'API /api/send :", resData);
 
-      // Si le backend api/send s'est déjà chargé de l'insertion Supabase BDD
+      let newMsg: Message;
+
+      // Si l'API retourne le message enregistré en BDD
       if (resData.messageRecord) {
         const inserted = resData.messageRecord;
-        const newMsg: Message = {
+        newMsg = {
           id: inserted.id,
           expediteur: inserted.sender_email,
           destinataire: inserted.recipient_email,
@@ -218,29 +233,37 @@ export default function App() {
           is_deleted: false,
           is_read: true,
         };
+      } else {
+        // 2. SINON ENREGISTREMENT LOCAL SUPABASE BDD
+        const payload = {
+          sender_email: MY_EMAIL,
+          recipient_email: newMsgData.destinataire,
+          subject: newMsgData.objet,
+          body: newMsgData.message,
+          is_read: true,
+        };
 
-        setMessages((prev) => [newMsg, ...prev]);
-        setSelectedMessageId(newMsg.id);
-        setSelectedFolderId('envoyes');
-        setIsComposeOpen(false);
-        return;
-      }
+        const { data, error } = await supabase.from('messages').insert([payload]).select();
 
-      // 2. SINON ENREGISTREMENT LOCAL SUPABASE BDD
-      const payload = {
-        sender_email: MY_EMAIL,
-        recipient_email: newMsgData.destinataire,
-        subject: newMsgData.objet,
-        body: newMsgData.message,
-        is_read: true,
-      };
+        if (error || !data?.[0]) {
+          console.error("Erreur Supabase lors de l'enregistrement :", error?.message);
+          alert(`E-mail envoyé via Resend mais erreur d'enregistrement local : ${error?.message}`);
+          return;
+        }
 
-      const { data, error } = await supabase.from('messages').insert([payload]).select();
-
-      if (error) {
-        console.error("Erreur Supabase lors de l'enregistrement :", error.message);
-        alert(`E-mail envoyé via Resend mais erreur d'enregistrement local : ${error.message}`);
-        return;
+        const inserted = data[0];
+        newMsg = {
+          id: inserted.id,
+          expediteur: inserted.sender_email,
+          destinataire: inserted.recipient_email,
+          objet: inserted.subject || '',
+          message: inserted.body,
+          dossier: inserted.theme || 'Général',
+          date: inserted.created_at,
+          masque: false,
+          is_deleted: false,
+          is_read: true,
+        };
       }
 
       // 3. MISE À JOUR DE LA LISTE DE CONTACTS
@@ -249,26 +272,9 @@ export default function App() {
         .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
 
       // 4. MISE À JOUR DE L'INTERFACE UTILISATEUR
-      if (data && data[0]) {
-        const inserted = data[0];
-        const newMsg: Message = {
-          id: inserted.id,
-          expediteur: inserted.sender_email,
-          destinataire: inserted.recipient_email,
-          objet: inserted.subject || '',
-          message: inserted.body,
-          dossier: inserted.theme || 'Général',
-          date: inserted.created_at,
-          masque: false,
-          is_deleted: false,
-          is_read: true,
-        };
-
-        setMessages((prev) => [newMsg, ...prev]);
-        setSelectedMessageId(newMsg.id);
-        setSelectedFolderId('envoyes');
-      }
-
+      setMessages((prev) => [newMsg, ...prev]);
+      setSelectedMessageId(newMsg.id);
+      setSelectedFolderId('envoyes');
       setIsComposeOpen(false);
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : 'Erreur inconnue';
@@ -340,11 +346,18 @@ export default function App() {
     setSelectedMessageId(msg.id);
   };
 
-  // LOGIQUE DE FILTRAGE DU DOSSIER
-  const filterByFolder = (msg: Message, folderId: string) => {
+  // ---------------------------------------------------------------------------
+  // LOGIQUE DE FILTRAGE
+  // ---------------------------------------------------------------------------
+  const filterByFolder = useCallback((msg: Message, folderId: string) => {
     const folderKey = folderId.toLowerCase().trim();
     const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
+    const destinataireClean = (msg.destinataire || '').trim().toLowerCase();
+
+    // Provenance et destination
     const isSentByMe = expediteurClean === MY_EMAIL;
+    const isSelfSent = isSentByMe && destinataireClean === MY_EMAIL;
+    const isExternalOutgoing = isSentByMe && !isSelfSent;
 
     // 1. CORBEILLE
     if (folderKey === 'corbeille' || folderKey === 'trash') {
@@ -358,9 +371,14 @@ export default function App() {
     }
     if (msg.masque) return false;
 
-    // 3. ENVOYÉS
+    // 3. MESSAGES ENVOYÉS
     if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') {
       return isSentByMe;
+    }
+
+    // Exclusion des messages sortants purs de la boîte de réception et dossiers thématiques
+    if (isExternalOutgoing) {
+      return false;
     }
 
     // 4. TOUS LES MESSAGES
@@ -368,10 +386,10 @@ export default function App() {
       return true;
     }
 
-    // 5. DOSSIERS THÉMATIQUES
+    // 5. DOSSIERS THÉMATIQUES (Général, Projets, etc.)
     const msgDossierClean = (msg.dossier || 'Général').trim().toLowerCase();
     return msgDossierClean === folderKey;
-  };
+  }, []);
 
   const filteredMessages = useMemo(() => {
     return messages.filter((msg) => filterByFolder(msg, selectedFolderId)).filter((msg) => {
@@ -408,7 +426,7 @@ export default function App() {
 
       return true;
     });
-  }, [messages, selectedFolderId, searchTerm, filters, MY_EMAIL]);
+  }, [messages, selectedFolderId, searchTerm, filters, filterByFolder]);
 
   // CHANGEMENT DE DOSSIER : Sélectionne le 1er message du dossier actif
   const handleFolderSelect = (folderId: string) => {
@@ -475,6 +493,16 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={fetchMessages}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-md text-xs font-semibold transition-all cursor-pointer shadow-xs disabled:opacity-50"
+              title="Rafraîchir les messages depuis Supabase"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : 'text-gray-600'}`} />
+              <span>Rafraîchir</span>
+            </button>
+
             <button
               onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-md text-xs font-semibold transition-all cursor-pointer"
