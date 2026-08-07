@@ -30,7 +30,18 @@ interface MessageDetailProps {
   onForwardMessage?: (message: Message) => void;
   onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
   onToggleReadMessage?: (id: string, currentReadStatus: boolean) => void;
+  onMoveMessage?: (id: string, newFolder: string) => void;
 }
+
+const DEFAULT_FOLDERS = [
+  'Général',
+  'Test',
+  'Home',
+  'Sherpa',
+  'Archives',
+  'Fait',
+  'Messages traités',
+];
 
 const stripHtml = (html?: string): string => {
   if (!html) return '';
@@ -46,6 +57,7 @@ export default function MessageDetail({
   onForwardMessage,
   onToggleHideMessage,
   onToggleReadMessage,
+  onMoveMessage,
 }: MessageDetailProps) {
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -67,6 +79,11 @@ export default function MessageDetail({
       </div>
     );
   }
+
+  // Liste globale incluant le dossier actuel s'il est personnalisé
+  const availableFolders = Array.from(
+    new Set([...DEFAULT_FOLDERS, message.dossier || 'Général'])
+  );
 
   const formatDateString = (dateStr: string) => {
     try {
@@ -131,18 +148,22 @@ ${textContent}
       {/* BARRE D'ACTION SUPÉRIEURE */}
       <div className="px-8 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/40 print:hidden">
         <div className="flex items-center gap-2">
-          <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-mono font-bold uppercase tracking-wider border ${
-              message.dossier === 'Sherpa'
-                ? 'bg-blue-50 text-blue-700 border-blue-200/60'
-                : message.dossier === 'Divers'
-                ? 'bg-amber-50 text-amber-700 border-amber-200/60'
-                : 'bg-purple-50 text-purple-700 border-purple-200/60'
-            }`}
-          >
-            <Folder className="w-3.5 h-3.5 stroke-[2]" />
-            Dossier : {message.dossier || 'Général'}
-          </span>
+          {/* MENU DÉROULANT DE DÉPLACEMENT DE DOSSIER */}
+          <div className="relative flex items-center">
+            <Folder className="w-3.5 h-3.5 stroke-[2] absolute left-2.5 text-purple-700 pointer-events-none z-10" />
+            <select
+              value={message.dossier || 'Général'}
+              onChange={(e) => onMoveMessage?.(message.id, e.target.value)}
+              className="pl-8 pr-6 py-1 bg-purple-50 text-purple-700 border border-purple-200/60 rounded-md text-xs font-mono font-bold tracking-wider cursor-pointer hover:bg-purple-100 transition-all focus:outline-none focus:ring-2 focus:ring-purple-400"
+            >
+              {availableFolders.map((folderName) => (
+                <option key={folderName} value={folderName} className="text-gray-800 bg-white font-sans">
+                  Dossier : {folderName}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <span className="inline-flex items-center gap-1 px-2 py-1 text-emerald-700 bg-emerald-50 border border-emerald-200/50 rounded-md text-[10px] font-mono uppercase font-bold">
             <ShieldCheck className="w-3 h-3" />
             Classifié
