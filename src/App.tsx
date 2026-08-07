@@ -32,7 +32,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'messagerie' | 'pages'>('messagerie');
 
   // DOSSIER ACTIF : 'tous' par défaut
-  const [selectedFolderId, setSelectedFolderId] = useState<string>('tous');
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('général');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
 
@@ -197,6 +197,24 @@ export default function App() {
     }
   };
 
+  const handleBulkMoveMessages = async (ids: string[], newFolder: string) => {
+    if (ids.length === 0) return;
+
+    setMessages((prev) =>
+      prev.map((m) => (ids.includes(m.id) ? { ...m, dossier: newFolder } : m))
+    );
+
+    const { error } = await supabase
+      .from('messages')
+      .update({ theme: newFolder })
+      .in('id', ids);
+
+    if (error) {
+      console.error('Erreur lors du déplacement groupé :', error.message);
+      fetchMessages();
+    }
+  };
+
   const handleToggleHideMessage = async (id: string, currentStatus: boolean) => {
     const newStatus = !currentStatus;
 
@@ -209,7 +227,6 @@ export default function App() {
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
     try {
-      // 1. ENVOI VIA LA ROUTE API VERCEL /api/send
       const response = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,11 +247,8 @@ export default function App() {
         return;
       }
 
-      console.log("✅ Message traité par l'API /api/send :", resData);
-
       let newMsg: Message;
 
-      // Si l'API retourne le message enregistré en BDD
       if (resData.messageRecord) {
         const inserted = resData.messageRecord;
         newMsg = {
@@ -250,7 +264,6 @@ export default function App() {
           is_read: true,
         };
       } else {
-        // 2. SINON ENREGISTREMENT LOCAL SUPABASE BDD
         const payload = {
           sender_email: MY_EMAIL,
           recipient_email: newMsgData.destinataire,
@@ -282,12 +295,10 @@ export default function App() {
         };
       }
 
-      // 3. MISE À JOUR DE LA LISTE DE CONTACTS
       await supabase
         .from('contacts_uniques')
         .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
 
-      // 4. MISE À JOUR DE L'INTERFACE UTILISATEUR
       setMessages((prev) => [newMsg, ...prev]);
       setSelectedMessageId(newMsg.id);
       setSelectedFolderId('envoyes');
@@ -370,7 +381,6 @@ export default function App() {
     const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
     const destinataireClean = (msg.destinataire || '').trim().toLowerCase();
 
-    // Provenance et destination
     const isSentByMe = expediteurClean === MY_EMAIL;
     const isSelfSent = isSentByMe && destinataireClean === MY_EMAIL;
     const isExternalOutgoing = isSentByMe && !isSelfSent;
@@ -397,19 +407,17 @@ export default function App() {
       return isSentByMe;
     }
 
-    // Exclusion des messages sortants purs uniquement pour les dossiers thématiques
     if (isExternalOutgoing) {
       return false;
     }
 
-    // 5. DOSSIERS THÉMATIQUES (Général, Projets, etc.)
+    // 5. DOSSIERS THÉMATIQUES (Général, Sherpa, Test, etc.)
     const msgDossierClean = (msg.dossier || 'Général').trim().toLowerCase();
     return msgDossierClean === folderKey;
   }, []);
 
   const filteredMessages = useMemo(() => {
     return messages.filter((msg) => filterByFolder(msg, selectedFolderId)).filter((msg) => {
-      // FILTRES DE RECHERCHE
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchGlobal =
@@ -444,7 +452,6 @@ export default function App() {
     });
   }, [messages, selectedFolderId, searchTerm, filters, filterByFolder]);
 
-  // CHANGEMENT DE DOSSIER : Sélectionne le 1er message du dossier actif
   const handleFolderSelect = (folderId: string) => {
     setSelectedFolderId(folderId);
 
@@ -577,6 +584,8 @@ export default function App() {
               onDeleteMessage={handleDeleteMessage}
               onToggleHideMessage={handleToggleHideMessage}
               onToggleReadMessage={handleToggleReadMessage}
+              onMoveMessage={handleMoveMessageToFolder}
+              onBulkMoveMessages={handleBulkMoveMessages}
             />
 
             <MessageDetail

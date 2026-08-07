@@ -86,13 +86,14 @@ export default function Sidebar({
       count: foldersMap.get(name) || 0,
     }));
 
+    // Reconstitution de la liste avec "Général" en première position
     return [
+      generalFolder,
       {
         id: 'tous',
         name: 'Tous les messages',
         count: receivedMessages.length,
       },
-      generalFolder,
       {
         id: 'envoyes',
         name: 'Messages envoyés',

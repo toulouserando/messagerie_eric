@@ -1,6 +1,18 @@
 import { useState, useMemo } from 'react';
 import { Message } from '../types';
-import { Search, Mail, MailOpen, Trash2, Eye, EyeOff, Printer, Download } from 'lucide-react';
+import {
+  Search,
+  Mail,
+  MailOpen,
+  Trash2,
+  Eye,
+  EyeOff,
+  Printer,
+  Download,
+  CheckSquare,
+  Square,
+  Folder,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface MessageListProps {
@@ -11,7 +23,19 @@ interface MessageListProps {
   onDeleteMessage: (id: string) => void;
   onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
   onToggleReadMessage?: (id: string, currentReadStatus: boolean) => void;
+  onMoveMessage?: (id: string, targetFolder: string) => void;
+  onBulkMoveMessages?: (ids: string[], targetFolder: string) => void;
 }
+
+const DEFAULT_FOLDERS = [
+  'Général',
+  'Test',
+  'Home',
+  'Sherpa',
+  'Archives',
+  'Fait',
+  'Messages traités',
+];
 
 const MY_EMAILS = [
   (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
@@ -32,8 +56,11 @@ export default function MessageList({
   onDeleteMessage,
   onToggleHideMessage,
   onToggleReadMessage,
+  onMoveMessage,
+  onBulkMoveMessages,
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const finalFiltered = useMemo(() => {
     const folderFiltered = messages.filter((msg) => {
@@ -62,7 +89,7 @@ export default function MessageList({
         return true;
       }
 
-      // 5. Dossiers thématiques (ex: Général, Sherpa, Home)
+      // 5. Dossiers thématiques (ex: Général, Sherpa, Home, Test)
       const currentFolder = (msg.dossier || 'Général').trim().toLowerCase();
       if (currentFolder === folderKey) {
         return !isSentByMe || isToMe;
@@ -101,6 +128,34 @@ export default function MessageList({
     }
   };
 
+  // Sélection individuelle
+  const toggleSelectOne = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  // Tout sélectionner / tout décocher
+  const toggleSelectAll = () => {
+    if (selectedIds.length === finalFiltered.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(finalFiltered.map((msg) => msg.id));
+    }
+  };
+
+  // Action de déplacement en masse
+  const handleBulkMove = (targetFolder: string) => {
+    if (!targetFolder || selectedIds.length === 0) return;
+    if (onBulkMoveMessages) {
+      onBulkMoveMessages(selectedIds, targetFolder);
+    } else if (onMoveMessage) {
+      selectedIds.forEach((id) => onMoveMessage(id, targetFolder));
+    }
+    setSelectedIds([]);
+  };
+
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
 
@@ -137,8 +192,11 @@ ${textContent}
     }, 150);
   };
 
+  const isAllSelected = finalFiltered.length > 0 && selectedIds.length === finalFiltered.length;
+
   return (
     <div id="message-list-container" className="w-96 border-r border-gray-200 bg-gray-50/30 flex flex-col h-full shrink-0">
+      {/* BARRE DE RECHERCHE ET ACTIONS EN MASSE */}
       <div className="p-4 bg-white border-b border-gray-200 space-y-3">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 stroke-[1.75]" />
@@ -148,11 +206,56 @@ ${textContent}
             placeholder="Rechercher un message..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 focus:bg-white transition-all text-gray-900 placeholder:text-gray-400"
+            className="w-full pl-10 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 focus:bg-white transition-all text-gray-900 placeholder:text-gray-400"
           />
         </div>
+
+        {/* BARRE D'ACTION GROUPÉE */}
+        {finalFiltered.length > 0 && (
+          <div className="flex items-center justify-between pt-1 text-xs">
+            <button
+              onClick={toggleSelectAll}
+              className="flex items-center gap-1.5 font-medium text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              {isAllSelected ? (
+                <CheckSquare className="w-4 h-4 text-blue-600" />
+              ) : (
+                <Square className="w-4 h-4 text-gray-400" />
+              )}
+              <span>
+                {selectedIds.length > 0
+                  ? `${selectedIds.length} sélectionné(s)`
+                  : 'Tout sélectionner'}
+              </span>
+            </button>
+
+            {selectedIds.length > 0 && (
+              <div className="relative flex items-center">
+                <Folder className="w-3.5 h-3.5 absolute left-2 text-purple-700 pointer-events-none z-10" />
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    handleBulkMove(e.target.value);
+                    e.target.value = '';
+                  }}
+                  className="pl-7 pr-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-md text-xs font-semibold cursor-pointer hover:bg-purple-100 transition-all focus:outline-none"
+                >
+                  <option value="" disabled>
+                    Déplacer vers...
+                  </option>
+                  {DEFAULT_FOLDERS.map((folder) => (
+                    <option key={folder} value={folder} className="bg-white text-gray-800 font-sans">
+                      {folder}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* LISTE DES MESSAGES */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {finalFiltered.length === 0 ? (
           <div className="text-center py-12 px-4">
@@ -168,6 +271,7 @@ ${textContent}
           <AnimatePresence initial={false}>
             {finalFiltered.map((msg) => {
               const isSelected = selectedMessageId === msg.id;
+              const isChecked = selectedIds.includes(msg.id);
               const isHidden = msg.masque === true || msg.is_visible === false;
               const isUnread = !msg.is_read;
               const expediteur = (msg.expediteur || '').toLowerCase().trim();
@@ -196,6 +300,19 @@ ${textContent}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
+                      {/* CHECKBOX SELECTION INDIVIDUELLE */}
+                      <button
+                        onClick={(e) => toggleSelectOne(e, msg.id)}
+                        className="text-gray-400 hover:text-blue-600 shrink-0"
+                        title={isChecked ? 'Décocher' : 'Sélectionner'}
+                      >
+                        {isChecked ? (
+                          <CheckSquare className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <Square className="w-4 h-4 text-gray-300 group-hover:text-gray-400" />
+                        )}
+                      </button>
+
                       <span
                         className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-300 ${
                           isUnread ? 'bg-blue-600 animate-pulse' : 'bg-gray-300/80'
