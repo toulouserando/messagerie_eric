@@ -371,19 +371,19 @@ export default function App() {
     }
     if (msg.masque) return false;
 
-    // 3. MESSAGES ENVOYÉS
+    // 3. TOUS LES MESSAGES
+    if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
+      return true;
+    }
+
+    // 4. MESSAGES ENVOYÉS
     if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') {
       return isSentByMe;
     }
 
-    // Exclusion des messages sortants purs de la boîte de réception et dossiers thématiques
+    // Exclusion des messages sortants purs uniquement pour les dossiers thématiques
     if (isExternalOutgoing) {
       return false;
-    }
-
-    // 4. TOUS LES MESSAGES
-    if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
-      return true;
     }
 
     // 5. DOSSIERS THÉMATIQUES (Général, Projets, etc.)
