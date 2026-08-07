@@ -21,7 +21,7 @@ export default function Sidebar({
     'ericgalaxy5@free.fr',
   ];
 
-  // Détection souple (gère les majuscules, espaces et formats avec nom)
+  // Détection souple
   const isSentByMe = (msg: Message) => {
     const sender = (msg.expediteur || '').toLowerCase();
     return MY_EMAILS.some((email) => sender.includes(email));
@@ -47,10 +47,11 @@ export default function Sidebar({
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
 
-    // Dossier Général par défaut
-    foldersMap.set('Général', 0);
+    // 1. Liste des dossiers permanents obligatoires
+    const permanentFolders = ['Général', 'Test', 'Messages traités', 'Archives', 'Fait'];
+    permanentFolders.forEach((name) => foldersMap.set(name, 0));
 
-    // Compte dynamique par sous-dossier uniquement pour les messages reçus
+    // 2. Décompte dynamique (conserve les dossiers permanents + ajoute les nouveaux s'il y en a)
     receivedMessages.forEach((msg) => {
       const folderName = (msg.dossier || 'Général').trim();
       const formattedName = folderName.charAt(0).toUpperCase() + folderName.slice(1);
@@ -66,18 +67,28 @@ export default function Sidebar({
       });
     });
 
-    customFolderList.sort((a, b) => a.name.localeCompare(b.name));
+    // Ordonner : d'abord les dossiers permanents dans l'ordre, puis les éventuels autres par ordre alphabétique
+    customFolderList.sort((a, b) => {
+      const indexA = permanentFolders.findIndex((f) => f.toLowerCase() === a.id);
+      const indexB = permanentFolders.findIndex((f) => f.toLowerCase() === b.id);
+
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+
+      return a.name.localeCompare(b.name);
+    });
 
     return [
       {
         id: 'tous',
         name: 'Tous les messages',
-        count: receivedMessages.length, // Total des reçus (4)
+        count: receivedMessages.length,
       },
       {
         id: 'envoyes',
         name: 'Messages envoyés',
-        count: sentMessages.length, // Total des envoyés (15)
+        count: sentMessages.length,
       },
       ...customFolderList,
       {
