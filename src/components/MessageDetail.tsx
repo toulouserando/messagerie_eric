@@ -145,10 +145,11 @@ ${textContent}
 
   return (
     <div id="message-detail-pane" className="flex-1 bg-white flex flex-col h-full overflow-hidden relative print:overflow-visible">
-      {/* BARRE D'ACTION SUPÉRIEURE */}
-      <div className="px-8 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/40 print:hidden">
-        <div className="flex items-center gap-2">
-          {/* MENU DÉROULANT DE DÉPLACEMENT DE DOSSIER */}
+      {/* BARRE D'ACTION SUPÉRIEURE AVEC DÉFILEMENT FLEXIBLE */}
+      <div className="px-4 py-3 border-b border-gray-200 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 shrink-0 bg-gray-50/40 overflow-x-auto print:hidden">
+        
+        {/* DOSSIER ET STATUT */}
+        <div className="flex items-center gap-2 shrink-0">
           <div className="relative flex items-center">
             <Folder className="w-3.5 h-3.5 stroke-[2] absolute left-2.5 text-purple-700 pointer-events-none z-10" />
             <select
@@ -164,21 +165,21 @@ ${textContent}
             </select>
           </div>
 
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-emerald-700 bg-emerald-50 border border-emerald-200/50 rounded-md text-[10px] font-mono uppercase font-bold">
+          <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-emerald-700 bg-emerald-50 border border-emerald-200/50 rounded-md text-[10px] font-mono uppercase font-bold">
             <ShieldCheck className="w-3 h-3" />
             Classifié
           </span>
         </div>
 
         {/* BOUTONS D'ACTIONS */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto shrink-0 max-w-full pb-1 lg:pb-0">
           <button
             onClick={() => window.print()}
             title="Imprimer uniquement ce message"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Imprimer</span>
+            <span className="hidden xl:inline">Imprimer</span>
           </button>
 
           {message.is_deleted ? (
@@ -187,10 +188,10 @@ ${textContent}
                 <button
                   id="btn-restore-detail"
                   onClick={() => onRestoreMessage(message.id)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restauration</span>
+                  <span>Restaurer</span>
                 </button>
               )}
             </>
@@ -200,7 +201,7 @@ ${textContent}
                 <button
                   id="btn-reply-detail"
                   onClick={() => onReplyMessage(message)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0"
                 >
                   <Reply className="w-3.5 h-3.5" />
                   <span>Répondre</span>
@@ -211,7 +212,7 @@ ${textContent}
                 <button
                   id="btn-forward-detail"
                   onClick={() => onForwardMessage(message)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0"
                 >
                   <Forward className="w-3.5 h-3.5" />
                   <span>Transférer</span>
@@ -222,10 +223,10 @@ ${textContent}
                 id="btn-download-detail"
                 onClick={handleDownloadMessage}
                 title="Télécharger l'e-mail sur votre disque dur"
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Télécharger</span>
+                <span className="hidden xl:inline">Télécharger</span>
               </button>
 
               {onToggleReadMessage && (
@@ -233,17 +234,17 @@ ${textContent}
                   id="btn-toggle-read-detail"
                   onClick={() => onToggleReadMessage(message.id, !!message.is_read)}
                   title={message.is_read ? 'Marquer le message comme non lu' : 'Marquer le message comme lu'}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0"
                 >
                   {message.is_read ? (
                     <>
                       <Mail className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Marquer non lu</span>
+                      <span className="hidden xl:inline">Non lu</span>
                     </>
                   ) : (
                     <>
                       <MailOpen className="w-3.5 h-3.5 text-blue-600" />
-                      <span className="text-blue-600 font-bold">Marquer lu</span>
+                      <span className="text-blue-600 font-bold hidden xl:inline">Lu</span>
                     </>
                   )}
                 </button>
@@ -253,17 +254,17 @@ ${textContent}
                 <button
                   id="btn-hide-detail"
                   onClick={() => onToggleHideMessage(message.id, !!message.masque)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0"
                 >
                   {message.masque ? (
                     <>
                       <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Réafficher</span>
+                      <span className="hidden xl:inline">Réafficher</span>
                     </>
                   ) : (
                     <>
                       <EyeOff className="w-3.5 h-3.5 text-gray-500" />
-                      <span>Masquer</span>
+                      <span className="hidden xl:inline">Masquer</span>
                     </>
                   )}
                 </button>
@@ -274,17 +275,17 @@ ${textContent}
           <button
             id="btn-delete-detail"
             onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>{message.is_deleted ? 'Supprimer définitivement' : 'Supprimer'}</span>
+            <span>Supprimer</span>
           </button>
         </div>
       </div>
 
       {/* DÉTAILS DU CONTENU */}
-      <div className="flex-1 overflow-y-auto p-8 lg:p-10 print:p-0 print:overflow-visible">
-        <div className="mb-8 border-b border-gray-100 pb-6 print:mb-4 print:pb-2 flex items-start justify-between gap-4">
+      <div className="flex-1 overflow-y-auto p-6 lg:p-8 print:p-0 print:overflow-visible">
+        <div className="mb-6 border-b border-gray-100 pb-4 print:mb-4 print:pb-2 flex items-start justify-between gap-4">
           <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-950 leading-tight print:text-lg">
             {message.objet || '(Sans objet)'}
           </h1>
@@ -299,8 +300,8 @@ ${textContent}
         </div>
 
         {/* MÉTADONNÉES */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50/50 border border-gray-200 p-5 rounded-xl mb-8 print:p-3 print:mb-4 print:bg-transparent">
-          <div className="space-y-1.5 text-left">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50/50 border border-gray-200 p-4 rounded-xl mb-6 print:p-3 print:mb-4 print:bg-transparent">
+          <div className="space-y-1 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Expéditeur (De)
             </span>
@@ -312,7 +313,7 @@ ${textContent}
             </div>
           </div>
 
-          <div className="space-y-1.5 text-left">
+          <div className="space-y-1 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Destinataire (À)
             </span>
@@ -324,7 +325,7 @@ ${textContent}
             </div>
           </div>
 
-          <div className="space-y-1.5 text-left">
+          <div className="space-y-1 text-left">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Date d'envoi
             </span>
@@ -339,7 +340,7 @@ ${textContent}
 
         {/* CORPS DU MESSAGE */}
         <div className="text-left">
-          <div className="flex items-center justify-between mb-4 print:mb-2">
+          <div className="flex items-center justify-between mb-3 print:mb-2">
             <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Corps du message
             </span>
@@ -352,7 +353,7 @@ ${textContent}
             </button>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm print:border-none print:p-0 print:shadow-none">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm print:border-none print:p-0 print:shadow-none">
             {sanitizedHtml ? (
               <div
                 className="prose max-w-none text-sm text-gray-800 font-sans print:text-xs overflow-x-auto"
