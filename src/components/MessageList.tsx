@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Message } from '../types';
 import {
   Search,
@@ -61,6 +61,11 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Réinitialisation de la sélection multiple lors d'un changement de dossier
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [selectedFolderId]);
 
   const finalFiltered = useMemo(() => {
     const folderFiltered = messages.filter((msg) => {

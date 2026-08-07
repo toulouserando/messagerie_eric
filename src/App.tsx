@@ -20,6 +20,13 @@ import { FileText, Mail, Trash2, Printer, Download, RefreshCw } from 'lucide-rea
 // Email de l'expéditeur principal (normalisé hors du composant)
 const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
 
+// Utilitaire de normalisation des noms de dossiers ("test" -> "Test", "général" -> "Général")
+const formatFolderName = (folder: string): string => {
+  if (!folder) return 'Général';
+  const clean = folder.trim();
+  return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+};
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('sherpa_authenticated') === 'true';
@@ -31,7 +38,7 @@ export default function App() {
   // ÉTAT DE LA VUE : 'messagerie' (classique) ou 'pages' (mode document)
   const [viewMode, setViewMode] = useState<'messagerie' | 'pages'>('messagerie');
 
-  // DOSSIER ACTIF : 'tous' par défaut
+  // DOSSIER ACTIF : 'général' par défaut
   const [selectedFolderId, setSelectedFolderId] = useState<string>('général');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -73,7 +80,7 @@ export default function App() {
         objet: item.subject || '',
         message: item.body || '',
         messageHtml: item.body_html || item.message_html || undefined,
-        dossier: item.theme || 'Général',
+        dossier: item.theme ? formatFolderName(item.theme) : 'Général',
         date: item.created_at,
         masque: item.is_archived || false,
         is_deleted: item.is_deleted || false,
@@ -150,7 +157,7 @@ export default function App() {
     localStorage.removeItem('sherpa_authenticated');
     setIsAuthenticated(false);
     setSelectedMessageId(null);
-    setSelectedFolderId('tous');
+    setSelectedFolderId('général');
   };
 
   const handleOpenNewMessage = () => {
@@ -182,17 +189,20 @@ export default function App() {
   // ACTIONS SUR LES MESSAGES (Déplacer, Masquer, Supprimer, Restaurer, Envoyer)
   // ---------------------------------------------------------------------------
   const handleMoveMessageToFolder = async (id: string, newFolder: string) => {
+    const formattedFolder = formatFolderName(newFolder);
+
     setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, dossier: newFolder } : m))
+      prev.map((m) => (m.id === id ? { ...m, dossier: formattedFolder } : m))
     );
 
     const { error } = await supabase
       .from('messages')
-      .update({ theme: newFolder })
+      .update({ theme: formattedFolder })
       .eq('id', id);
 
     if (error) {
       console.error('Erreur lors du déplacement du message :', error.message);
+      alert(`Erreur Supabase : ${error.message}`);
       fetchMessages();
     }
   };
@@ -200,17 +210,20 @@ export default function App() {
   const handleBulkMoveMessages = async (ids: string[], newFolder: string) => {
     if (ids.length === 0) return;
 
+    const formattedFolder = formatFolderName(newFolder);
+
     setMessages((prev) =>
-      prev.map((m) => (ids.includes(m.id) ? { ...m, dossier: newFolder } : m))
+      prev.map((m) => (ids.includes(m.id) ? { ...m, dossier: formattedFolder } : m))
     );
 
     const { error } = await supabase
       .from('messages')
-      .update({ theme: newFolder })
+      .update({ theme: formattedFolder })
       .in('id', ids);
 
     if (error) {
       console.error('Erreur lors du déplacement groupé :', error.message);
+      alert(`Erreur Supabase : ${error.message}`);
       fetchMessages();
     }
   };
@@ -257,7 +270,7 @@ export default function App() {
           destinataire: inserted.recipient_email,
           objet: inserted.subject || '',
           message: inserted.body,
-          dossier: inserted.theme || 'Général',
+          dossier: formatFolderName(inserted.theme || 'Général'),
           date: inserted.created_at,
           masque: false,
           is_deleted: false,
@@ -287,7 +300,7 @@ export default function App() {
           destinataire: inserted.recipient_email,
           objet: inserted.subject || '',
           message: inserted.body,
-          dossier: inserted.theme || 'Général',
+          dossier: formatFolderName(inserted.theme || 'Général'),
           date: inserted.created_at,
           masque: false,
           is_deleted: false,
@@ -378,12 +391,6 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const filterByFolder = useCallback((msg: Message, folderId: string) => {
     const folderKey = folderId.toLowerCase().trim();
-    const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
-    const destinataireClean = (msg.destinataire || '').trim().toLowerCase();
-
-    const isSentByMe = expediteurClean === MY_EMAIL;
-    const isSelfSent = isSentByMe && destinataireClean === MY_EMAIL;
-    const isExternalOutgoing = isSentByMe && !isSelfSent;
 
     // 1. CORBEILLE
     if (folderKey === 'corbeille' || folderKey === 'trash') {
@@ -404,14 +411,11 @@ export default function App() {
 
     // 4. MESSAGES ENVOYÉS
     if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') {
-      return isSentByMe;
+      const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
+      return expediteurClean === MY_EMAIL;
     }
 
-    if (isExternalOutgoing) {
-      return false;
-    }
-
-    // 5. DOSSIERS THÉMATIQUES (Général, Sherpa, Test, etc.)
+    // 5. DOSSIERS THÉMATIQUES (Général, Test, Sherpa, etc.)
     const msgDossierClean = (msg.dossier || 'Général').trim().toLowerCase();
     return msgDossierClean === folderKey;
   }, []);
