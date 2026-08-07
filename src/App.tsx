@@ -179,8 +179,24 @@ export default function App() {
   };
 
   // ---------------------------------------------------------------------------
-  // ACTIONS SUR LES MESSAGES (Masquer, Supprimer, Restaurer, Envoyer)
+  // ACTIONS SUR LES MESSAGES (Déplacer, Masquer, Supprimer, Restaurer, Envoyer)
   // ---------------------------------------------------------------------------
+  const handleMoveMessageToFolder = async (id: string, newFolder: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, dossier: newFolder } : m))
+    );
+
+    const { error } = await supabase
+      .from('messages')
+      .update({ theme: newFolder })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Erreur lors du déplacement du message :', error.message);
+      fetchMessages();
+    }
+  };
+
   const handleToggleHideMessage = async (id: string, currentStatus: boolean) => {
     const newStatus = !currentStatus;
 
@@ -571,6 +587,7 @@ export default function App() {
               onForwardMessage={handleForwardMessage}
               onToggleHideMessage={handleToggleHideMessage}
               onToggleReadMessage={handleToggleReadMessage}
+              onMoveMessage={handleMoveMessageToFolder}
             />
           </div>
         )}

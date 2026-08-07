@@ -1,9 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Message } from '../types';
-import { 
-  Mail, Calendar, User, Folder, Trash2, ShieldCheck, 
-  Reply, Forward, Eye, EyeOff, Copy, Check, AlertTriangle, RotateCcw, Download, Printer,
-  MailOpen
+import {
+  Mail,
+  Calendar,
+  User,
+  Folder,
+  Trash2,
+  ShieldCheck,
+  Reply,
+  Forward,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  AlertTriangle,
+  RotateCcw,
+  Download,
+  Printer,
+  MailOpen,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import DOMPurify from 'dompurify';
@@ -17,6 +31,12 @@ interface MessageDetailProps {
   onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
   onToggleReadMessage?: (id: string, currentReadStatus: boolean) => void;
 }
+
+const stripHtml = (html?: string): string => {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return doc.body.textContent || '';
+};
 
 export default function MessageDetail({
   message,
@@ -51,6 +71,7 @@ export default function MessageDetail({
   const formatDateString = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
       return d.toLocaleDateString('fr-FR', {
         weekday: 'long',
         day: 'numeric',
@@ -70,13 +91,14 @@ export default function MessageDetail({
   };
 
   const handleCopyText = () => {
-    const textToCopy = message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
+    const textToCopy = message.message || stripHtml(message.messageHtml);
     navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDownloadMessage = () => {
+    const textContent = message.message || stripHtml(message.messageHtml);
     const content = `==================================================
 EXPÉDITEUR   : ${message.expediteur || 'Inconnu'}
 DESTINATAIRE : ${message.destinataire || 'Inconnu'}
@@ -85,17 +107,17 @@ DOSSIER      : ${message.dossier || 'Général'}
 OBJET        : ${message.objet || '(Sans objet)'}
 ==================================================
 
-${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
+${textContent}
 `;
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    
+
     const safeSubject = (message.objet || 'message').replace(/[^a-z0-9]/gi, '_').toLowerCase();
     link.href = url;
     link.download = `${safeSubject}_${message.id}.txt`;
-    
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -119,7 +141,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
             }`}
           >
             <Folder className="w-3.5 h-3.5 stroke-[2]" />
-            Dossier : {message.dossier}
+            Dossier : {message.dossier || 'Général'}
           </span>
           <span className="inline-flex items-center gap-1 px-2 py-1 text-emerald-700 bg-emerald-50 border border-emerald-200/50 rounded-md text-[10px] font-mono uppercase font-bold">
             <ShieldCheck className="w-3 h-3" />
@@ -185,7 +207,6 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
                 <span>Télécharger</span>
               </button>
 
-              {/* BOUTON MARQUER LU / NON LU */}
               {onToggleReadMessage && (
                 <button
                   id="btn-toggle-read-detail"
@@ -246,11 +267,12 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
           <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-950 leading-tight print:text-lg">
             {message.objet || '(Sans objet)'}
           </h1>
-          
-          {/* BADGE D'ÉTAT LECTURE DANS L'EN-TÊTE */}
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase shrink-0 ${
-            message.is_read ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-500/20'
-          }`}>
+
+          <span
+            className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase shrink-0 ${
+              message.is_read ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-500/20'
+            }`}
+          >
             {message.is_read ? 'Lu' : 'Non lu'}
           </span>
         </div>
@@ -309,7 +331,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
             </button>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs print:border-none print:p-0 print:shadow-none">
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm print:border-none print:p-0 print:shadow-none">
             {sanitizedHtml ? (
               <div
                 className="prose max-w-none text-sm text-gray-800 font-sans print:text-xs overflow-x-auto"
@@ -327,7 +349,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
       {/* POP-UP DE CONFIRMATION DE SUPPRESSION */}
       <AnimatePresence>
         {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 print:hidden">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -356,7 +378,7 @@ ${message.message || message.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
                 </button>
                 <button
                   onClick={handleConfirmDelete}
-                  className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+                  className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
                 >
                   Confirmer
                 </button>

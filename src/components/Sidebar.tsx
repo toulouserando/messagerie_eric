@@ -47,37 +47,44 @@ export default function Sidebar({
   const getFolders = (): Folder[] => {
     const foldersMap = new Map<string, number>();
 
-    // 1. Liste des dossiers permanents obligatoires
-    const permanentFolders = ['Général', 'Test', 'Messages traités', 'Archives', 'Fait'];
-    permanentFolders.forEach((name) => foldersMap.set(name, 0));
+    // Liste des dossiers fixes intermédiaires
+    const staticMiddleNames = ['Archives', 'Fait', 'Messages traités', 'Test'];
+    const predefinedFolders = ['Général', ...staticMiddleNames];
+    predefinedFolders.forEach((name) => foldersMap.set(name, 0));
 
-    // 2. Décompte dynamique (conserve les dossiers permanents + ajoute les nouveaux s'il y en a)
+    // Décompte dynamique basé sur les messages reçus
     receivedMessages.forEach((msg) => {
       const folderName = (msg.dossier || 'Général').trim();
       const formattedName = folderName.charAt(0).toUpperCase() + folderName.slice(1);
       foldersMap.set(formattedName, (foldersMap.get(formattedName) || 0) + 1);
     });
 
-    const customFolderList: Folder[] = [];
+    // 1. Dossier Général
+    const generalFolder: Folder = {
+      id: 'général',
+      name: 'Général',
+      count: foldersMap.get('Général') || 0,
+    };
+
+    // 2. Sous-dossiers automatiques/dynamiques (Home, Sherpa, etc.)
+    const dynamicFolders: Folder[] = [];
     foldersMap.forEach((count, name) => {
-      customFolderList.push({
-        id: name.toLowerCase(),
-        name,
-        count,
-      });
+      if (name !== 'Général' && !staticMiddleNames.includes(name)) {
+        dynamicFolders.push({
+          id: name.toLowerCase(),
+          name,
+          count,
+        });
+      }
     });
+    dynamicFolders.sort((a, b) => a.name.localeCompare(b.name));
 
-    // Ordonner : d'abord les dossiers permanents dans l'ordre, puis les éventuels autres par ordre alphabétique
-    customFolderList.sort((a, b) => {
-      const indexA = permanentFolders.findIndex((f) => f.toLowerCase() === a.id);
-      const indexB = permanentFolders.findIndex((f) => f.toLowerCase() === b.id);
-
-      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-      if (indexA !== -1) return -1;
-      if (indexB !== -1) return 1;
-
-      return a.name.localeCompare(b.name);
-    });
+    // 3. Dossiers fixes du bas (Archives, Fait, Messages traités, Test)
+    const staticMiddleFolders: Folder[] = staticMiddleNames.map((name) => ({
+      id: name.toLowerCase(),
+      name,
+      count: foldersMap.get(name) || 0,
+    }));
 
     return [
       {
@@ -85,12 +92,14 @@ export default function Sidebar({
         name: 'Tous les messages',
         count: receivedMessages.length,
       },
+      generalFolder,
       {
         id: 'envoyes',
         name: 'Messages envoyés',
         count: sentMessages.length,
       },
-      ...customFolderList,
+      ...dynamicFolders,
+      ...staticMiddleFolders,
       {
         id: 'masques',
         name: 'Messages masqués',
@@ -110,7 +119,7 @@ export default function Sidebar({
     <aside id="sidebar-container" className="w-80 border-r border-gray-200 bg-white flex flex-col h-full shrink-0">
       <div className="p-6 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-xs">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
             <span className="text-white font-bold text-sm">M</span>
           </div>
           <div>
@@ -124,7 +133,7 @@ export default function Sidebar({
         <button
           id="btn-compose-message"
           onClick={onNewMessageClick}
-          className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2 shadow-xs hover:shadow-md transition-all cursor-pointer"
+          className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
           <span>Nouveau message</span>

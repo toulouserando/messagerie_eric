@@ -13,6 +13,17 @@ interface MessageListProps {
   onToggleReadMessage?: (id: string, currentReadStatus: boolean) => void;
 }
 
+const MY_EMAILS = [
+  (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
+  'ericgalaxy5@free.fr',
+];
+
+const stripHtml = (html?: string): string => {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return doc.body.textContent || '';
+};
+
 export default function MessageList({
   messages = [],
   selectedFolderId,
@@ -24,18 +35,13 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const MY_EMAILS = [
-    (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
-    'ericgalaxy5@free.fr',
-  ];
-
   const finalFiltered = useMemo(() => {
     const folderFiltered = messages.filter((msg) => {
       const isHidden = msg.masque === true || msg.is_visible === false;
       const isDeleted = msg.is_deleted === true;
       const expediteur = (msg.expediteur || '').toLowerCase().trim();
       const destinataire = (msg.destinataire || '').toLowerCase().trim();
-      
+
       const isSentByMe = MY_EMAILS.includes(expediteur);
       const isToMe = MY_EMAILS.includes(destinataire);
       const folderKey = selectedFolderId.toLowerCase().trim();
@@ -48,16 +54,15 @@ export default function MessageList({
       if (folderKey === 'masques' || folderKey === 'messages masqués' || folderKey === 'archived') return isHidden;
       if (isHidden) return false;
 
-      // 3. Messages envoyés (tout ce qui part de mes adresses)
+      // 3. Messages envoyés
       if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') return isSentByMe;
 
-      // 4. Tous les messages (la totalité des e-mails non supprimés et non masqués)
+      // 4. Tous les messages
       if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
         return true;
       }
 
       // 5. Dossiers thématiques (ex: Général, Sherpa, Home)
-      // Un dossier de boîte de réception ne contient QUE les messages reçus (ou auto-envoyés)
       const currentFolder = (msg.dossier || 'Général').trim().toLowerCase();
       if (currentFolder === folderKey) {
         return !isSentByMe || isToMe;
@@ -70,7 +75,7 @@ export default function MessageList({
 
     const query = searchQuery.toLowerCase().trim();
     return folderFiltered.filter((msg) => {
-      const rawContent = (msg.message || '').toLowerCase();
+      const rawContent = (msg.message || stripHtml(msg.messageHtml)).toLowerCase();
       return (
         (msg.objet || '').toLowerCase().includes(query) ||
         (msg.destinataire || '').toLowerCase().includes(query) ||
@@ -99,7 +104,7 @@ export default function MessageList({
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
 
-    const textContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
+    const textContent = msg.message || stripHtml(msg.messageHtml);
 
     const content = `==================================================
 EXPÉDITEUR   : ${msg.expediteur || 'Inconnu'}
@@ -167,7 +172,9 @@ ${textContent}
               const isUnread = !msg.is_read;
               const expediteur = (msg.expediteur || '').toLowerCase().trim();
               const destinataire = (msg.destinataire || '').toLowerCase().trim();
-              const isSentFolder = selectedFolderId.toLowerCase() === 'envoyes' || (MY_EMAILS.includes(expediteur) && !MY_EMAILS.includes(destinataire));
+              const isSentFolder =
+                selectedFolderId.toLowerCase() === 'envoyes' ||
+                (MY_EMAILS.includes(expediteur) && !MY_EMAILS.includes(destinataire));
 
               return (
                 <motion.div
@@ -184,7 +191,7 @@ ${textContent}
                       ? 'bg-white border-blue-600 ring-2 ring-blue-600/10 shadow-md shadow-blue-100/30'
                       : isUnread
                       ? 'bg-blue-50/40 border-blue-200 hover:bg-blue-50/70'
-                      : 'bg-white hover:bg-gray-50 border-gray-200 shadow-xs'
+                      : 'bg-white hover:bg-gray-50 border-gray-200 shadow-sm'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -213,17 +220,19 @@ ${textContent}
                   </h4>
 
                   <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-3">
-                    {msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || ''}
+                    {msg.message || stripHtml(msg.messageHtml)}
                   </p>
 
                   <div className="flex items-center justify-between">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold tracking-wide uppercase ${
-                      msg.dossier === 'Sherpa'
-                        ? 'bg-blue-50 text-blue-700 border border-blue-100/50'
-                        : msg.dossier === 'Divers'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-100/50'
-                        : 'bg-purple-50 text-purple-700 border border-purple-100/50'
-                    }`}>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold tracking-wide uppercase ${
+                        msg.dossier === 'Sherpa'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-100/50'
+                          : msg.dossier === 'Divers'
+                          ? 'bg-amber-50 text-amber-700 border border-amber-100/50'
+                          : 'bg-purple-50 text-purple-700 border border-purple-100/50'
+                      }`}
+                    >
                       {msg.dossier || 'Général'}
                     </span>
 
