@@ -24,7 +24,7 @@ interface MessageListProps {
   onToggleHideMessage?: (id: string, currentStatus: boolean) => void;
   onToggleReadMessage?: (id: string, currentReadStatus: boolean) => void;
   onMoveMessage?: (id: string, targetFolder: string) => void;
-  onBulkMoveMessages?: (ids: string[], targetFolder: string) => void;
+  onBulkMoveMessages?: (ids: string[], targetFolder: string) => void | Promise<void>;
 }
 
 const DEFAULT_FOLDERS = [
@@ -146,11 +146,11 @@ export default function MessageList({
     setTargetFolder('');
 
     if (onBulkMoveMessages) {
-      onBulkMoveMessages(idsToMove, folder);
+      // Exécution prioritaire de la fonction groupée du parent (Supabase bulk update)
+      await onBulkMoveMessages(idsToMove, folder);
     } else if (onMoveMessage) {
-      for (const id of idsToMove) {
-        await onMoveMessage(id, folder);
-      }
+      // Si la prop groupée n'est pas transmise, exécuter les appels individuels en parallèle
+      await Promise.all(idsToMove.map((id) => onMoveMessage(id, folder)));
     }
   };
 
@@ -401,7 +401,6 @@ ${textContent}
 
                       <button
                         type="button"
-                        id={`btn-delete-${msg.id}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           onDeleteMessage(msg.id);

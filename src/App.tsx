@@ -152,6 +152,7 @@ export default function App() {
     }
   }, []);
 
+  // Marque automatiquement comme lu lors du visionnage
   useEffect(() => {
     if (!selectedMessageId) return;
 
@@ -162,7 +163,7 @@ export default function App() {
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [selectedMessageId, messages, markAsRead]);
+  }, [selectedMessageId, markAsRead]); // 'messages' retiré des dépendances pour éviter les boucles d'effets
 
   const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
     const newReadStatus = !currentReadStatus;
