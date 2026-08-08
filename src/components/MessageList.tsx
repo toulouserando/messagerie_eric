@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, MouseEvent } from 'react';
 import { Message } from '../types';
 import {
   Search,
@@ -38,14 +38,27 @@ const DEFAULT_FOLDERS = [
 ];
 
 const MY_EMAILS = [
-  (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
+  (import.meta.env?.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').toLowerCase().trim(),
   'ericgalaxy5@free.fr',
 ];
 
+// Nettoyage HTML rapide et compatible SSR/tests
 const stripHtml = (html?: string): string => {
   if (!html) return '';
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  return doc.body.textContent || '';
+  return html.replace(/<[^>]*>?/gm, '').trim();
+};
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+
+  return d.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 export default function MessageList({
@@ -62,12 +75,13 @@ export default function MessageList({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Réinitialisation de la sélection lors d'un changement de dossier
   useEffect(() => {
     setSelectedIds([]);
   }, [selectedFolderId]);
 
   const finalFiltered = useMemo(() => {
+    const folderKey = selectedFolderId.toLowerCase().trim();
+
     const folderFiltered = messages.filter((msg) => {
       const isHidden = msg.masque === true || msg.is_visible === false;
       const isDeleted = msg.is_deleted === true;
@@ -76,7 +90,6 @@ export default function MessageList({
 
       const isSentByMe = MY_EMAILS.includes(expediteur);
       const isToMe = MY_EMAILS.includes(destinataire);
-      const folderKey = selectedFolderId.toLowerCase().trim();
 
       if (folderKey === 'corbeille' || folderKey === 'trash') return isDeleted;
       if (isDeleted) return false;
@@ -86,7 +99,7 @@ export default function MessageList({
 
       if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') return isSentByMe;
 
-      if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
+      if (['tous', 'tous_les_messages', 'tous les messages', 'all'].includes(folderKey)) {
         return true;
       }
 
@@ -112,28 +125,9 @@ export default function MessageList({
     });
   }, [messages, selectedFolderId, searchQuery]);
 
-  const formatDate = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-
-      return d.toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  // Sélection individuelle + Ouverture dans le volet de lecture
-  const toggleSelectOne = (e: React.MouseEvent, msg: Message) => {
+  const toggleSelectOne = (e: MouseEvent, msg: Message) => {
     e.stopPropagation();
-
     onSelectMessage(msg);
-
     setSelectedIds((prev) =>
       prev.includes(msg.id) ? prev.filter((i) => i !== msg.id) : [...prev, msg.id]
     );
@@ -162,7 +156,7 @@ export default function MessageList({
     setSelectedIds([]);
   };
 
-  const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
+  const handleDownloadSingleMessage = (e: MouseEvent, msg: Message) => {
     e.stopPropagation();
 
     const textContent = msg.message || stripHtml(msg.messageHtml);
@@ -190,7 +184,7 @@ ${textContent}
     URL.revokeObjectURL(url);
   };
 
-  const handlePrintSingleMessage = (e: React.MouseEvent, msg: Message) => {
+  const handlePrintSingleMessage = (e: MouseEvent, msg: Message) => {
     e.stopPropagation();
     onSelectMessage(msg);
     setTimeout(() => {
@@ -292,7 +286,6 @@ ${textContent}
                 <motion.div
                   id={`message-card-${msg.id}`}
                   key={msg.id}
-                  layoutId={`msg-card-layout-${msg.id}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
@@ -309,6 +302,7 @@ ${textContent}
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <button
+                        type="button"
                         onClick={(e) => toggleSelectOne(e, msg)}
                         className="text-gray-400 hover:text-blue-600 shrink-0"
                         title={isChecked ? 'Décocher' : 'Sélectionner'}
@@ -363,6 +357,7 @@ ${textContent}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                       {onToggleReadMessage && (
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onToggleReadMessage(msg.id, !!msg.is_read);
@@ -375,6 +370,7 @@ ${textContent}
                       )}
 
                       <button
+                        type="button"
                         onClick={(e) => handleDownloadSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
                         title="Télécharger cet e-mail (.txt)"
@@ -383,6 +379,7 @@ ${textContent}
                       </button>
 
                       <button
+                        type="button"
                         onClick={(e) => handlePrintSingleMessage(e, msg)}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                         title="Imprimer cet e-mail"
@@ -392,6 +389,7 @@ ${textContent}
 
                       {onToggleHideMessage && (
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onToggleHideMessage(msg.id, isHidden);
@@ -404,6 +402,7 @@ ${textContent}
                       )}
 
                       <button
+                        type="button"
                         id={`btn-delete-${msg.id}`}
                         onClick={(e) => {
                           e.stopPropagation();
