@@ -61,8 +61,9 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkFolder, setBulkFolder] = useState('');
 
-  // Réinitialisation de la sélection multiple lors d'un changement de dossier
+  // Réinitialisation lors d'un changement de dossier
   useEffect(() => {
     setSelectedIds([]);
   }, [selectedFolderId]);
@@ -78,23 +79,18 @@ export default function MessageList({
       const isToMe = MY_EMAILS.includes(destinataire);
       const folderKey = selectedFolderId.toLowerCase().trim();
 
-      // 1. Corbeille
       if (folderKey === 'corbeille' || folderKey === 'trash') return isDeleted;
       if (isDeleted) return false;
 
-      // 2. Masqués
       if (folderKey === 'masques' || folderKey === 'messages masqués' || folderKey === 'archived') return isHidden;
       if (isHidden) return false;
 
-      // 3. Messages envoyés
       if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') return isSentByMe;
 
-      // 4. Tous les messages
       if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
         return true;
       }
 
-      // 5. Dossiers thématiques (ex: Général, Sherpa, Home, Test)
       const currentFolder = (msg.dossier || 'Général').trim().toLowerCase();
       if (currentFolder === folderKey) {
         return !isSentByMe || isToMe;
@@ -133,15 +129,19 @@ export default function MessageList({
     }
   };
 
-  // Sélection individuelle
-  const toggleSelectOne = (e: React.MouseEvent, id: string) => {
+  // Sélection individuelle + Ouverture automatique dans le volet de lecture
+  const toggleSelectOne = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
+    
+    // Ouvre le message à droite
+    onSelectMessage(msg);
+
+    // Bascule la coche
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      prev.includes(msg.id) ? prev.filter((i) => i !== msg.id) : [...prev, msg.id]
     );
   };
 
-  // Tout sélectionner / tout décocher
   const toggleSelectAll = () => {
     if (selectedIds.length === finalFiltered.length) {
       setSelectedIds([]);
@@ -150,7 +150,6 @@ export default function MessageList({
     }
   };
 
-  // Action de déplacement en masse
   const handleBulkMove = (targetFolder: string) => {
     if (!targetFolder || selectedIds.length === 0) return;
     if (onBulkMoveMessages) {
@@ -159,6 +158,7 @@ export default function MessageList({
       selectedIds.forEach((id) => onMoveMessage(id, targetFolder));
     }
     setSelectedIds([]);
+    setBulkFolder('');
   };
 
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
@@ -238,10 +238,11 @@ ${textContent}
               <div className="relative flex items-center">
                 <Folder className="w-3.5 h-3.5 absolute left-2 text-purple-700 pointer-events-none z-10" />
                 <select
-                  defaultValue=""
+                  value={bulkFolder}
                   onChange={(e) => {
-                    handleBulkMove(e.target.value);
-                    e.target.value = '';
+                    const folder = e.target.value;
+                    setBulkFolder(folder);
+                    handleBulkMove(folder);
                   }}
                   className="pl-7 pr-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-md text-xs font-semibold cursor-pointer hover:bg-purple-100 transition-all focus:outline-none"
                 >
@@ -305,9 +306,8 @@ ${textContent}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
-                      {/* CHECKBOX SELECTION INDIVIDUELLE */}
                       <button
-                        onClick={(e) => toggleSelectOne(e, msg.id)}
+                        onClick={(e) => toggleSelectOne(e, msg)}
                         className="text-gray-400 hover:text-blue-600 shrink-0"
                         title={isChecked ? 'Décocher' : 'Sélectionner'}
                       >
