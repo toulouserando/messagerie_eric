@@ -73,9 +73,8 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [targetFolder, setTargetFolder] = useState<string>('');
 
-  // Réinitialisation de la sélection UNIQUEMENT si le dossier change
+  // Réinitialisation de la sélection uniquement si le dossier change
   useEffect(() => {
     setSelectedIds([]);
   }, [selectedFolderId]);
@@ -119,7 +118,6 @@ export default function MessageList({
     });
   }, [messages, selectedFolderId, searchQuery]);
 
-  // Vérification de la sélection complète de la vue actuelle
   const isAllSelected =
     finalFiltered.length > 0 && finalFiltered.every((msg) => selectedIds.includes(msg.id));
 
@@ -138,21 +136,20 @@ export default function MessageList({
     }
   };
 
+  // Traitement du déplacement par lot
   const handleBulkMove = async (folder: string) => {
     if (!folder || selectedIds.length === 0) return;
 
-    // Sauvegarde des IDs sélectionnés pour le traitement
     const idsToMove = [...selectedIds];
 
-    // Vider la sélection locale immédiatement pour l'interface
+    // Vider la sélection visuelle immédiatement
     setSelectedIds([]);
-    setTargetFolder('');
 
     if (onBulkMoveMessages) {
-      // Envoie le tableau entier des IDs en une seule opération Supabase
+      // Exécute la mise à jour groupée avec filtre .in('id', idsToMove)
       await onBulkMoveMessages(idsToMove, folder);
     } else if (onMoveMessage) {
-      // Fallback au cas où la fonction groupée n'est pas passée
+      // Sécurité si onBulkMoveMessages n'est pas fourni
       await Promise.all(idsToMove.map((id) => onMoveMessage(id, folder)));
     }
   };
@@ -232,10 +229,9 @@ ${textContent}
               <div className="relative flex items-center">
                 <Folder className="w-3.5 h-3.5 absolute left-2 text-purple-700 pointer-events-none z-10" />
                 <select
-                  value={targetFolder}
+                  value=""
                   onChange={(e) => {
                     const folder = e.target.value;
-                    setTargetFolder(folder);
                     if (folder) {
                       handleBulkMove(folder);
                     }
