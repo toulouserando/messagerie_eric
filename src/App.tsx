@@ -84,7 +84,8 @@ export default function App() {
     }
   }, [isAuthenticated, fetchMessages]);
 
-  const filteredMessages = useMemo(() => {
+  // 1. Filtrage global (Barre de recherche + Filtres avancés)
+  const searchFilteredMessages = useMemo(() => {
     return messages.filter((msg) => {
       const query = searchTerm.toLowerCase().trim();
       const matchSearch =
@@ -107,15 +108,11 @@ export default function App() {
     });
   }, [messages, searchTerm, filters]);
 
-  useEffect(() => {
-    if (!filteredMessages.length) {
-      setSelectedMessageId(null);
-      return;
-    }
-
+  // 2. Filtrage par dossier sélectionné
+  const displayedMessages = useMemo(() => {
     const folderKey = selectedFolderId.toLowerCase().trim();
 
-    const folderMessages = filteredMessages.filter((msg) => {
+    return searchFilteredMessages.filter((msg) => {
       const isHidden = msg.masque === true;
       const isDeleted = msg.is_deleted === true;
       const expediteur = (msg.expediteur || '').toLowerCase().trim();
@@ -133,13 +130,21 @@ export default function App() {
 
       return (msg.dossier || 'Général').trim().toLowerCase() === folderKey;
     });
+  }, [searchFilteredMessages, selectedFolderId]);
+
+  // 3. Gestion de la sélection automatique du premier message du dossier
+  useEffect(() => {
+    if (!displayedMessages.length) {
+      setSelectedMessageId(null);
+      return;
+    }
 
     setSelectedMessageId((prevId) => {
-      const isStillInFolder = folderMessages.some((m) => m.id === prevId);
-      if (isStillInFolder) return prevId;
-      return folderMessages.length > 0 ? folderMessages[0].id : null;
+      const isStillInList = displayedMessages.some((m) => m.id === prevId);
+      if (isStillInList) return prevId;
+      return displayedMessages[0].id;
     });
-  }, [selectedFolderId, filteredMessages]);
+  }, [displayedMessages]);
 
   const markAsRead = useCallback(async (id: string) => {
     setMessages((prev) =>
@@ -163,7 +168,7 @@ export default function App() {
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [selectedMessageId, markAsRead]); // 'messages' retiré des dépendances pour éviter les boucles d'effets
+  }, [selectedMessageId, messages, markAsRead]);
 
   const handleToggleReadMessage = async (id: string, currentReadStatus: boolean) => {
     const newReadStatus = !currentReadStatus;
@@ -259,6 +264,10 @@ export default function App() {
     const newMasqueStatus = !currentStatus;
     const newIsVisible = !newMasqueStatus;
 
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, masque: newMasqueStatus } : m))
+    );
+
     const { error } = await supabase
       .from('messages')
       .update({ is_visible: newIsVisible })
@@ -266,12 +275,8 @@ export default function App() {
 
     if (error) {
       console.error('Erreur lors du masquage/démasquage :', error.message);
-      return;
+      fetchMessages();
     }
-
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, masque: newMasqueStatus } : m))
-    );
   };
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
@@ -346,9 +351,13 @@ export default function App() {
         };
       }
 
-      await supabase
-        .from('contacts_uniques')
-        .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
+      try {
+        await supabase
+          .from('contacts_uniques')
+          .upsert({ email: newMsgData.destinataire }, { onConflict: 'email' });
+      } catch (cErr) {
+        console.warn('Impossible de mettre à jour contacts_uniques :', cErr);
+      }
 
       setMessages((prev) => [newMsg, ...prev]);
       setSelectedMessageId(newMsg.id);
@@ -365,45 +374,42 @@ export default function App() {
     const targetMsg = messages.find((m) => m.id === id);
 
     if (targetMsg?.is_deleted || selectedFolderId === 'corbeille') {
+      setMessages((prev) => prev.filter((m) => m.id !== id));
       const { error } = await supabase.from('messages').delete().eq('id', id);
       if (error) {
         console.error('Erreur lors de la suppression définitive :', error.message);
-        return;
+        fetchMessages();
       }
-      setMessages((prev) => prev.filter((m) => m.id !== id));
     } else {
-      const { error } = await supabase.from('messages').update({ is_deleted: true }).eq('id', id);
-      if (error) {
-        console.error('Erreur lors du déplacement en corbeille :', error.message);
-        return;
-      }
       setMessages((prev) =>
         prev.map((m) => (m.id === id ? { ...m, is_deleted: true } : m))
       );
+      const { error } = await supabase.from('messages').update({ is_deleted: true }).eq('id', id);
+      if (error) {
+        console.error('Erreur lors du déplacement en corbeille :', error.message);
+        fetchMessages();
+      }
     }
   };
 
   const handleRestoreMessage = async (id: string) => {
-    const { error } = await supabase.from('messages').update({ is_deleted: false }).eq('id', id);
-    if (error) {
-      console.error('Erreur lors de la restauration :', error.message);
-      return;
-    }
-
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, is_deleted: false } : m))
     );
+    const { error } = await supabase.from('messages').update({ is_deleted: false }).eq('id', id);
+    if (error) {
+      console.error('Erreur lors de la restauration :', error.message);
+      fetchMessages();
+    }
   };
 
   const handleEmptyTrash = async () => {
+    setMessages((prev) => prev.filter((m) => !m.is_deleted));
     const { error } = await supabase.from('messages').delete().eq('is_deleted', true);
-
     if (error) {
       console.error('Erreur lors du vidage de la corbeille :', error.message);
-      return;
+      fetchMessages();
     }
-
-    setMessages((prev) => prev.filter((m) => !m.is_deleted));
   };
 
   const handleSearchChange = (query: string, newFilters: AdvancedFilters) => {
@@ -429,7 +435,7 @@ export default function App() {
         selectedFolderId={selectedFolderId}
         onSelectFolder={(folderId) => setSelectedFolderId(folderId)}
         onNewMessage={handleOpenNewMessage}
-        messages={filteredMessages}
+        messages={searchFilteredMessages}
         onLogout={handleLogout}
       />
 
@@ -487,7 +493,7 @@ export default function App() {
             {viewMode === 'messagerie' ? (
               <>
                 <MessageList
-                  messages={filteredMessages}
+                  messages={displayedMessages}
                   selectedFolderId={selectedFolderId}
                   selectedMessageId={selectedMessageId}
                   onSelectMessage={handleSelectMessage}
@@ -511,7 +517,7 @@ export default function App() {
                 />
               </>
             ) : (
-              <KeywordPagesView messages={filteredMessages} />
+              <KeywordPagesView messages={displayedMessages} />
             )}
           </Suspense>
         </div>
