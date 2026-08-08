@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, MouseEvent } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Message } from '../types';
 import {
   Search,
@@ -73,7 +73,9 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [targetFolder, setTargetFolder] = useState<string>('');
 
+  // Réinitialisation des sélections lors d'un changement de dossier
   useEffect(() => {
     setSelectedIds([]);
   }, [selectedFolderId]);
@@ -85,7 +87,6 @@ export default function MessageList({
       const isHidden = msg.masque === true || msg.is_visible === false;
       const isDeleted = msg.is_deleted === true;
       const expediteur = (msg.expediteur || '').toLowerCase().trim();
-
       const isSentByMe = MY_EMAILS.includes(expediteur);
 
       if (folderKey === 'corbeille' || folderKey === 'trash') return isDeleted;
@@ -108,7 +109,7 @@ export default function MessageList({
 
     const query = searchQuery.toLowerCase().trim();
     return folderFiltered.filter((msg) => {
-      const rawContent = (msg.message || stripHtml(msg.messageHtml)).toLowerCase();
+      const rawContent = (msg.message || '').toLowerCase();
       return (
         (msg.objet || '').toLowerCase().includes(query) ||
         (msg.destinataire || '').toLowerCase().includes(query) ||
@@ -118,7 +119,11 @@ export default function MessageList({
     });
   }, [messages, selectedFolderId, searchQuery]);
 
-  const toggleSelectOne = (e: MouseEvent, msg: Message) => {
+  // Vérification si TOUS les messages actuellement affichés sont sélectionnés
+  const isAllSelected =
+    finalFiltered.length > 0 && finalFiltered.every((msg) => selectedIds.includes(msg.id));
+
+  const toggleSelectOne = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
     setSelectedIds((prev) =>
       prev.includes(msg.id) ? prev.filter((i) => i !== msg.id) : [...prev, msg.id]
@@ -126,33 +131,33 @@ export default function MessageList({
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === finalFiltered.length) {
+    if (isAllSelected) {
       setSelectedIds([]);
     } else {
-      const allIds = finalFiltered.map((msg) => msg.id);
-      setSelectedIds(allIds);
+      setSelectedIds(finalFiltered.map((msg) => msg.id));
     }
   };
 
-  const handleBulkMove = async (targetFolder: string) => {
-    if (!targetFolder || selectedIds.length === 0) return;
+  const handleBulkMove = async (folder: string) => {
+    if (!folder || selectedIds.length === 0) return;
 
     const idsToMove = [...selectedIds];
     setSelectedIds([]);
+    setTargetFolder('');
 
     if (onBulkMoveMessages) {
-      onBulkMoveMessages(idsToMove, targetFolder);
+      onBulkMoveMessages(idsToMove, folder);
     } else if (onMoveMessage) {
       for (const id of idsToMove) {
-        await onMoveMessage(id, targetFolder);
+        await onMoveMessage(id, folder);
       }
     }
   };
 
-  const handleDownloadSingleMessage = (e: MouseEvent, msg: Message) => {
+  const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
 
-    const textContent = msg.message || stripHtml(msg.messageHtml);
+    const textContent = msg.message || stripHtml(msg.message);
 
     const content = `==================================================
 EXPÉDITEUR   : ${msg.expediteur || 'Inconnu'}
@@ -177,15 +182,13 @@ ${textContent}
     URL.revokeObjectURL(url);
   };
 
-  const handlePrintSingleMessage = (e: MouseEvent, msg: Message) => {
+  const handlePrintSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
     onSelectMessage(msg);
     setTimeout(() => {
       window.print();
     }, 150);
   };
-
-  const isAllSelected = finalFiltered.length > 0 && selectedIds.length === finalFiltered.length;
 
   return (
     <div id="message-list-container" className="w-96 border-r border-gray-200 bg-gray-50/30 flex flex-col h-full shrink-0">
@@ -227,9 +230,10 @@ ${textContent}
               <div className="relative flex items-center">
                 <Folder className="w-3.5 h-3.5 absolute left-2 text-purple-700 pointer-events-none z-10" />
                 <select
-                  value=""
+                  value={targetFolder}
                   onChange={(e) => {
                     const folder = e.target.value;
+                    setTargetFolder(folder);
                     if (folder) {
                       handleBulkMove(folder);
                     }
@@ -332,7 +336,7 @@ ${textContent}
                   </h4>
 
                   <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-3">
-                    {msg.message || stripHtml(msg.messageHtml)}
+                    {msg.message}
                   </p>
 
                   <div className="flex items-center justify-between">
