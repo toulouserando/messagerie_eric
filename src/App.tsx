@@ -75,15 +75,6 @@ export default function App() {
       }));
 
       setMessages(formattedMessages);
-
-      setSelectedMessageId((prevId) => {
-        const isStillValid = formattedMessages.some(
-          (m) => m.id === prevId && !m.masque && !m.is_deleted
-        );
-        if (isStillValid) return prevId;
-        const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
-        return visible.length > 0 ? visible[0].id : null;
-      });
     }
     setLoading(false);
   }, []);
@@ -93,6 +84,37 @@ export default function App() {
       fetchMessages();
     }
   }, [isAuthenticated, fetchMessages]);
+
+  // Auto-sélection du premier message au changement de dossier ou mise à jour de la liste
+  useEffect(() => {
+    if (!messages.length) return;
+
+    const folderKey = selectedFolderId.toLowerCase().trim();
+
+    const folderMessages = messages.filter((msg) => {
+      const isHidden = msg.masque === true;
+      const isDeleted = msg.is_deleted === true;
+      const expediteur = (msg.expediteur || '').toLowerCase().trim();
+      const isSentByMe = MY_EMAILS.includes(expediteur);
+
+      if (folderKey === 'corbeille' || folderKey === 'trash') return isDeleted;
+      if (isDeleted) return false;
+
+      if (folderKey === 'masques' || folderKey === 'messages masqués') return isHidden;
+      if (isHidden) return false;
+
+      if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') return isSentByMe;
+
+      if (['tous', 'tous_les_messages', 'tous les messages', 'all'].includes(folderKey)) return true;
+
+      return (msg.dossier || 'Général').trim().toLowerCase() === folderKey;
+    });
+
+    const isStillInFolder = folderMessages.some((m) => m.id === selectedMessageId);
+    if (!isStillInFolder) {
+      setSelectedMessageId(folderMessages.length > 0 ? folderMessages[0].id : null);
+    }
+  }, [selectedFolderId, messages, selectedMessageId]);
 
   const markAsRead = useCallback(async (id: string) => {
     setMessages((prev) =>
@@ -174,10 +196,6 @@ export default function App() {
       prev.map((m) => (m.id === id ? { ...m, dossier: formattedFolder } : m))
     );
 
-    if (selectedMessageId === id && selectedFolderId.toLowerCase() !== formattedFolder.toLowerCase()) {
-      setSelectedMessageId(null);
-    }
-
     const { error } = await supabase
       .from('messages')
       .update({ theme: formattedFolder })
@@ -198,10 +216,6 @@ export default function App() {
     setMessages((prev) =>
       prev.map((m) => (ids.includes(m.id) ? { ...m, dossier: formattedFolder } : m))
     );
-
-    if (selectedMessageId && ids.includes(selectedMessageId) && selectedFolderId.toLowerCase() !== formattedFolder.toLowerCase()) {
-      setSelectedMessageId(null);
-    }
 
     const { error } = await supabase
       .from('messages')
@@ -227,10 +241,6 @@ export default function App() {
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, masque: newStatus } : m))
     );
-
-    if (selectedMessageId === id && selectedFolderId.toLowerCase() !== 'masques') {
-      setSelectedMessageId(null);
-    }
   };
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
@@ -338,10 +348,6 @@ export default function App() {
         prev.map((m) => (m.id === id ? { ...m, is_deleted: true } : m))
       );
     }
-
-    if (selectedMessageId === id) {
-      setSelectedMessageId(null);
-    }
   };
 
   const handleRestoreMessage = async (id: string) => {
@@ -354,10 +360,6 @@ export default function App() {
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, is_deleted: false } : m))
     );
-
-    if (selectedMessageId === id) {
-      setSelectedMessageId(null);
-    }
   };
 
   const handleEmptyTrash = async () => {
@@ -369,7 +371,6 @@ export default function App() {
     }
 
     setMessages((prev) => prev.filter((m) => !m.is_deleted));
-    setSelectedMessageId(null);
   };
 
   const handleSearchChange = (query: string, newFilters: AdvancedFilters) => {
@@ -393,10 +394,7 @@ export default function App() {
     <div className="flex h-screen bg-gray-100 overflow-hidden font-sans text-gray-900">
       <Sidebar
         selectedFolderId={selectedFolderId}
-        onSelectFolder={(folderId) => {
-          setSelectedFolderId(folderId);
-          setSelectedMessageId(null);
-        }}
+        onSelectFolder={(folderId) => setSelectedFolderId(folderId)}
         onNewMessage={handleOpenNewMessage}
         messages={messages}
         onLogout={handleLogout}
