@@ -42,7 +42,6 @@ const MY_EMAILS = [
   'ericgalaxy5@free.fr',
 ];
 
-// Nettoyage HTML rapide et compatible SSR/tests
 const stripHtml = (html?: string): string => {
   if (!html) return '';
   return html.replace(/<[^>]*>?/gm, '').trim();
@@ -86,10 +85,8 @@ export default function MessageList({
       const isHidden = msg.masque === true || msg.is_visible === false;
       const isDeleted = msg.is_deleted === true;
       const expediteur = (msg.expediteur || '').toLowerCase().trim();
-      const destinataire = (msg.destinataire || '').toLowerCase().trim();
 
       const isSentByMe = MY_EMAILS.includes(expediteur);
-      const isToMe = MY_EMAILS.includes(destinataire);
 
       if (folderKey === 'corbeille' || folderKey === 'trash') return isDeleted;
       if (isDeleted) return false;
@@ -104,11 +101,7 @@ export default function MessageList({
       }
 
       const currentFolder = (msg.dossier || 'Général').trim().toLowerCase();
-      if (currentFolder === folderKey) {
-        return !isSentByMe || isToMe;
-      }
-
-      return false;
+      return currentFolder === folderKey;
     });
 
     if (!searchQuery.trim()) return folderFiltered;
@@ -127,7 +120,6 @@ export default function MessageList({
 
   const toggleSelectOne = (e: MouseEvent, msg: Message) => {
     e.stopPropagation();
-    onSelectMessage(msg);
     setSelectedIds((prev) =>
       prev.includes(msg.id) ? prev.filter((i) => i !== msg.id) : [...prev, msg.id]
     );
@@ -139,21 +131,22 @@ export default function MessageList({
     } else {
       const allIds = finalFiltered.map((msg) => msg.id);
       setSelectedIds(allIds);
-      if (finalFiltered.length > 0) {
-        onSelectMessage(finalFiltered[0]);
-      }
     }
   };
 
-  const handleBulkMove = (targetFolder: string) => {
+  const handleBulkMove = async (targetFolder: string) => {
     if (!targetFolder || selectedIds.length === 0) return;
 
-    if (onBulkMoveMessages) {
-      onBulkMoveMessages(selectedIds, targetFolder);
-    } else if (onMoveMessage) {
-      selectedIds.forEach((id) => onMoveMessage(id, targetFolder));
-    }
+    const idsToMove = [...selectedIds];
     setSelectedIds([]);
+
+    if (onBulkMoveMessages) {
+      onBulkMoveMessages(idsToMove, targetFolder);
+    } else if (onMoveMessage) {
+      for (const id of idsToMove) {
+        await onMoveMessage(id, targetFolder);
+      }
+    }
   };
 
   const handleDownloadSingleMessage = (e: MouseEvent, msg: Message) => {
@@ -214,6 +207,7 @@ ${textContent}
         {finalFiltered.length > 0 && (
           <div className="flex items-center justify-between pt-1 text-xs">
             <button
+              type="button"
               onClick={toggleSelectAll}
               className="flex items-center gap-1.5 font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >

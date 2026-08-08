@@ -1,8 +1,3 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import './App.css';
 import { Message } from './types';
@@ -15,13 +10,11 @@ import SearchBar, { AdvancedFilters } from './components/SearchBar';
 import KeywordPagesView from './components/KeywordPagesView';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
-import { FileText, Mail, Trash2, Printer, Download, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
-// Configuration des adresses de l'utilisateur
 const MAIN_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
 const MY_EMAILS = [MAIN_EMAIL, 'ericgalaxy5@free.fr'];
 
-// Normalisation des noms de dossiers ("test" -> "Test", "général" -> "Général")
 const formatFolderName = (folder: string): string => {
   if (!folder) return 'Général';
   const clean = folder.trim();
@@ -35,16 +28,12 @@ export default function App() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-
-  // VUE : 'messagerie' (classique) ou 'pages' (mode document)
   const [viewMode, setViewMode] = useState<'messagerie' | 'pages'>('messagerie');
 
-  // DOSSIER ACTIF
   const [selectedFolderId, setSelectedFolderId] = useState<string>('général');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
 
-  // RECHERCHE & FILTRES
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>({
     objet: '',
@@ -61,9 +50,6 @@ export default function App() {
     message?: string;
   }>({});
 
-  // ---------------------------------------------------------------------------
-  // CHARGEMENT DES MESSAGES (Supabase)
-  // ---------------------------------------------------------------------------
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -90,7 +76,6 @@ export default function App() {
 
       setMessages(formattedMessages);
 
-      // Sélectionner le 1er message visible si la sélection courante n'est plus valide
       setSelectedMessageId((prevId) => {
         const isStillValid = formattedMessages.some(
           (m) => m.id === prevId && !m.masque && !m.is_deleted
@@ -109,9 +94,6 @@ export default function App() {
     }
   }, [isAuthenticated, fetchMessages]);
 
-  // ---------------------------------------------------------------------------
-  // GESTION DU STATUT LU / NON LU
-  // ---------------------------------------------------------------------------
   const markAsRead = useCallback(async (id: string) => {
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, is_read: true } : m))
@@ -148,9 +130,6 @@ export default function App() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // AUTHENTIFICATION ET MODALES
-  // ---------------------------------------------------------------------------
   const handleLoginSuccess = () => {
     localStorage.setItem('sherpa_authenticated', 'true');
     setIsAuthenticated(true);
@@ -188,9 +167,6 @@ export default function App() {
     setIsComposeOpen(true);
   };
 
-  // ---------------------------------------------------------------------------
-  // ACTIONS SUR LES MESSAGES (Déplacer, Masquer, Supprimer, Restaurer, Envoyer)
-  // ---------------------------------------------------------------------------
   const handleMoveMessageToFolder = async (id: string, newFolder: string) => {
     const formattedFolder = formatFolderName(newFolder);
 
@@ -405,274 +381,107 @@ export default function App() {
     setSelectedMessageId(msg.id);
   };
 
-  // ---------------------------------------------------------------------------
-  // LOGIQUE DE FILTRAGE
-  // ---------------------------------------------------------------------------
-  const filterByFolder = useCallback((msg: Message, folderId: string) => {
-    const folderKey = folderId.toLowerCase().trim();
-    const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
-    const destinataireClean = (msg.destinataire || '').trim().toLowerCase();
-
-    const isSentByMe = MY_EMAILS.includes(expediteurClean);
-    const isToMe = MY_EMAILS.includes(destinataireClean);
-
-    // 1. CORBEILLE
-    if (folderKey === 'corbeille' || folderKey === 'trash') {
-      return msg.is_deleted === true;
-    }
-    if (msg.is_deleted) return false;
-
-    // 2. MASQUÉS
-    if (folderKey === 'masques' || folderKey === 'messages masqués' || folderKey === 'archived') {
-      return msg.masque === true;
-    }
-    if (msg.masque) return false;
-
-    // 3. TOUS LES MESSAGES
-    if (folderKey === 'tous' || folderKey === 'tous_les_messages' || folderKey === 'tous les messages' || folderKey === 'all') {
-      return true;
-    }
-
-    // 4. MESSAGES ENVOYÉS
-    if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') {
-      return isSentByMe;
-    }
-
-    // 5. DOSSIERS THÉMATIQUES (Général, Test, Sherpa, etc.)
-    const msgDossierClean = (msg.dossier || 'Général').trim().toLowerCase();
-    if (msgDossierClean === folderKey) {
-      return !isSentByMe || isToMe;
-    }
-
-    return false;
-  }, []);
-
-  const filteredMessages = useMemo(() => {
-    return messages.filter((msg) => filterByFolder(msg, selectedFolderId)).filter((msg) => {
-      if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const matchGlobal =
-          msg.objet?.toLowerCase().includes(query) ||
-          msg.message?.toLowerCase().includes(query) ||
-          msg.expediteur?.toLowerCase().includes(query) ||
-          msg.destinataire?.toLowerCase().includes(query) ||
-          msg.dossier?.toLowerCase().includes(query);
-
-        if (!matchGlobal) return false;
-      }
-
-      if (filters.objet && !msg.objet?.toLowerCase().includes(filters.objet.toLowerCase())) return false;
-      if (filters.message && !msg.message?.toLowerCase().includes(filters.message.toLowerCase())) return false;
-      if (filters.expediteur && !msg.expediteur?.toLowerCase().includes(filters.expediteur.toLowerCase())) return false;
-      if (filters.destinataire && !msg.destinataire?.toLowerCase().includes(filters.destinataire.toLowerCase())) return false;
-
-      if (filters.dateDebut) {
-        const startDate = new Date(filters.dateDebut);
-        if (!isNaN(startDate.getTime()) && new Date(msg.date) < startDate) return false;
-      }
-
-      if (filters.dateFin) {
-        const endDate = new Date(filters.dateFin);
-        if (!isNaN(endDate.getTime())) {
-          endDate.setHours(23, 59, 59, 999);
-          if (new Date(msg.date) > endDate) return false;
-        }
-      }
-
-      return true;
-    });
-  }, [messages, selectedFolderId, searchTerm, filters, filterByFolder]);
-
-  const handleFolderSelect = (folderId: string) => {
-    setSelectedFolderId(folderId);
-
-    const nextFolderMessages = messages.filter((msg) => filterByFolder(msg, folderId));
-
-    if (nextFolderMessages.length > 0) {
-      setSelectedMessageId(nextFolderMessages[0].id);
-    } else {
-      setSelectedMessageId(null);
-    }
-  };
-
-  const selectedMessage = messages.find((m) => m.id === selectedMessageId) || null;
+  const selectedMessage = useMemo(() => {
+    return messages.find((m) => m.id === selectedMessageId) || null;
+  }, [messages, selectedMessageId]);
 
   if (!isAuthenticated) {
     return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
-    <div id="app-workspace" className="flex h-screen w-full bg-white overflow-hidden text-gray-800 font-sans selection:bg-gray-100 print:h-auto print:overflow-visible">
-      <div className="print:hidden">
-        <Sidebar
-          messages={messages}
-          selectedFolderId={selectedFolderId}
-          onSelectFolder={handleFolderSelect}
-          onNewMessageClick={handleOpenNewMessage}
-          onLogout={handleLogout}
-        />
-      </div>
+    <div className="flex h-screen bg-gray-100 overflow-hidden font-sans text-gray-900">
+      <Sidebar
+        selectedFolderId={selectedFolderId}
+        onSelectFolder={(folderId) => {
+          setSelectedFolderId(folderId);
+          setSelectedMessageId(null);
+        }}
+        onNewMessage={handleOpenNewMessage}
+        messages={messages}
+        onLogout={handleLogout}
+      />
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden print:h-auto print:overflow-visible">
-        {/* BARRE DE RECHERCHE */}
-        <div className="print:hidden border-b border-gray-200">
-          <SearchBar onSearchChange={handleSearchChange} />
-        </div>
-
-        {/* BARRE D'OUTILS ET COMMUTATEUR DE VUE */}
-        <div className="bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between shrink-0 print:hidden">
-          <div className="flex items-center gap-1 bg-gray-200/80 p-1 rounded-lg">
-            <button
-              onClick={() => setViewMode('messagerie')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                viewMode === 'messagerie'
-                  ? 'bg-white text-blue-600 shadow-xs'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Mail className="w-3.5 h-3.5" />
-              <span>Messagerie Classique</span>
-            </button>
-            <button
-              onClick={() => setViewMode('pages')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                viewMode === 'pages'
-                  ? 'bg-white text-blue-600 shadow-xs'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Format Page / Document</span>
-            </button>
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* BARRE SUPÉRIEURE */}
+        <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm z-10">
+          <div className="flex items-center gap-3 flex-1 max-w-xl">
+            <SearchBar
+              searchTerm={searchTerm}
+              onSearchChange={handleSearchChange}
+            />
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={fetchMessages}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-md text-xs font-semibold transition-all cursor-pointer shadow-xs disabled:opacity-50"
-              title="Rafraîchir les messages depuis Supabase"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : 'text-gray-600'}`} />
-              <span>Rafraîchir</span>
-            </button>
-
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-md text-xs font-semibold transition-all cursor-pointer"
-              title="Envoyer tous les messages du dossier sélectionné vers votre imprimante"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Imprimer Boîte ({filteredMessages.length})</span>
-            </button>
-
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-semibold transition-all cursor-pointer"
-              title="Générer au format PDF"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>PDF</span>
-            </button>
-
-            {selectedFolderId === 'corbeille' ? (
+            <div className="bg-gray-100 p-1 rounded-lg flex items-center">
               <button
-                onClick={handleEmptyTrash}
-                className="flex items-center gap-1.5 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                type="button"
+                onClick={() => setViewMode('messagerie')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                  viewMode === 'messagerie'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Vider la corbeille</span>
+                Messagerie Classique
               </button>
-            ) : (
-              <span className="text-[11px] font-mono text-gray-500 font-medium hidden sm:inline ml-2 uppercase">
-                Dossier : {selectedFolderId}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500 text-xs font-medium print:hidden">
-            Chargement de la messagerie...
-          </div>
-        ) : viewMode === 'pages' ? (
-          <KeywordPagesView
-            messages={messages.filter((m) => !m.is_deleted)}
-            activeKeyword={selectedFolderId}
-            onSelectKeyword={(folder) => handleFolderSelect(folder.toLowerCase())}
-            onDeleteMessage={handleDeleteMessage}
-            onReplyMessage={handleReplyMessage}
-            onForwardMessage={handleForwardMessage}
-            onToggleHideMessage={handleToggleHideMessage}
-          />
-        ) : (
-          <div className="flex-1 flex h-full overflow-hidden print:hidden">
-            <MessageList
-              messages={filteredMessages}
-              selectedFolderId={selectedFolderId}
-              selectedMessageId={selectedMessageId}
-              onSelectMessage={handleSelectMessage}
-              onDeleteMessage={handleDeleteMessage}
-              onToggleHideMessage={handleToggleHideMessage}
-              onToggleReadMessage={handleToggleReadMessage}
-              onMoveMessage={handleMoveMessageToFolder}
-              onBulkMoveMessages={handleBulkMoveMessages}
-            />
-
-            <MessageDetail
-              message={selectedMessage}
-              onDeleteMessage={handleDeleteMessage}
-              onRestoreMessage={handleRestoreMessage}
-              onReplyMessage={handleReplyMessage}
-              onForwardMessage={handleForwardMessage}
-              onToggleHideMessage={handleToggleHideMessage}
-              onToggleReadMessage={handleToggleReadMessage}
-              onMoveMessage={handleMoveMessageToFolder}
-            />
-          </div>
-        )}
-
-        {/* VUE D'IMPRESSION */}
-        {viewMode === 'messagerie' && (
-          <div className="hidden print:block p-4 bg-white text-black font-sans">
-            <div className="border-b-2 border-black pb-3 mb-4">
-              <h1 className="text-xl font-bold uppercase">
-                Dossier : {selectedFolderId}
-              </h1>
-              <p className="text-xs text-gray-600 mt-1">
-                Impression générée le {new Date().toLocaleString('fr-FR')} | Nombre de messages : {filteredMessages.length}
-              </p>
+              <button
+                type="button"
+                onClick={() => setViewMode('pages')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                  viewMode === 'pages'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Format Page / Document
+              </button>
             </div>
 
-            {filteredMessages.length === 0 ? (
-              <p className="text-sm italic">Aucun message dans ce dossier.</p>
-            ) : (
-              <div className="space-y-4">
-                {filteredMessages.map((msg, idx) => (
-                  <article key={msg.id} className="border-b border-gray-300 pb-3">
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span>#{idx + 1} | De : {msg.expediteur || 'Inconnu'}</span>
-                      <span>{new Date(msg.date).toLocaleString('fr-FR')}</span>
-                    </div>
-                    <div className="text-xs font-semibold mb-1">
-                      À : {msg.destinataire || 'Inconnu'} | Objet : {msg.objet || '(Sans objet)'}
-                    </div>
-                    {msg.messageHtml ? (
-                      <div
-                        className="text-xs pl-2 border-l-2 border-gray-400 leading-snug prose prose-xs"
-                        dangerouslySetInnerHTML={{ __html: msg.messageHtml }}
-                      />
-                    ) : (
-                      <div className="text-xs pl-2 border-l-2 border-gray-400 whitespace-pre-wrap leading-snug">
-                        {msg.message}
-                      </div>
-                    )}
-                  </article>
-                ))}
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={fetchMessages}
+              disabled={loading}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Rafraîchir"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-        )}
+        </header>
+
+        {/* CONTENU PRINCIPAL */}
+        <div className="flex-1 flex overflow-hidden">
+          {viewMode === 'messagerie' ? (
+            <>
+              <MessageList
+                messages={messages}
+                selectedFolderId={selectedFolderId}
+                selectedMessageId={selectedMessageId}
+                onSelectMessage={handleSelectMessage}
+                onDeleteMessage={handleDeleteMessage}
+                onToggleHideMessage={handleToggleHideMessage}
+                onToggleReadMessage={handleToggleReadMessage}
+                onMoveMessage={handleMoveMessageToFolder}
+                onBulkMoveMessages={handleBulkMoveMessages}
+              />
+
+              <MessageDetail
+                message={selectedMessage}
+                onDeleteMessage={handleDeleteMessage}
+                onRestoreMessage={handleRestoreMessage}
+                onToggleHideMessage={handleToggleHideMessage}
+                onMoveMessage={handleMoveMessageToFolder}
+                onReply={handleReplyMessage}
+                onForward={handleForwardMessage}
+                onEmptyTrash={handleEmptyTrash}
+                selectedFolderId={selectedFolderId}
+              />
+            </>
+          ) : (
+            <KeywordPagesView messages={messages} />
+          )}
+        </div>
       </div>
 
       <AnimatePresence>
@@ -680,7 +489,7 @@ export default function App() {
           <NewMessageModal
             isOpen={isComposeOpen}
             onClose={() => setIsComposeOpen(false)}
-            onSendMessage={handleSendMessage}
+            onSend={handleSendMessage}
             initialData={initialComposeData}
           />
         )}
