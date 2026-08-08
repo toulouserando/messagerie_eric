@@ -89,9 +89,10 @@ export default function App() {
 
       setMessages(formattedMessages);
 
-      // Sélectionner le 1er message visible (non supprimé et non masqué) si aucun n'est sélectionné
+      // Sélectionner le 1er message visible si la sélection courante n'est plus valide
       setSelectedMessageId((prevId) => {
-        if (prevId) return prevId;
+        const isStillValid = formattedMessages.some((m) => m.id === prevId && !m.masque && !m.is_deleted);
+        if (isStillValid) return prevId;
         const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
         return visible.length > 0 ? visible[0].id : null;
       });
@@ -195,6 +196,11 @@ export default function App() {
       prev.map((m) => (m.id === id ? { ...m, dossier: formattedFolder } : m))
     );
 
+    // Désélectionner le message s'il quitte le dossier courant
+    if (selectedMessageId === id && selectedFolderId.toLowerCase() !== formattedFolder.toLowerCase()) {
+      setSelectedMessageId(null);
+    }
+
     const { error } = await supabase
       .from('messages')
       .update({ theme: formattedFolder })
@@ -215,6 +221,11 @@ export default function App() {
     setMessages((prev) =>
       prev.map((m) => (ids.includes(m.id) ? { ...m, dossier: formattedFolder } : m))
     );
+
+    // Désélectionner le message courant s'il fait partie de la sélection déplacée
+    if (selectedMessageId && ids.includes(selectedMessageId) && selectedFolderId.toLowerCase() !== formattedFolder.toLowerCase()) {
+      setSelectedMessageId(null);
+    }
 
     const { error } = await supabase
       .from('messages')
