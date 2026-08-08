@@ -9,7 +9,6 @@ import SearchBar, { AdvancedFilters } from './components/SearchBar';
 import { supabase } from './supabaseClient';
 import { RefreshCw } from 'lucide-react';
 
-// Chargement différé pour réduire la taille du bundle initial
 const NewMessageModal = lazy(() => import('./components/NewMessageModal'));
 const KeywordPagesView = lazy(() => import('./components/KeywordPagesView'));
 
@@ -67,10 +66,9 @@ export default function App() {
         destinataire: item.recipient_email || '',
         objet: item.subject || '',
         message: item.body || '',
-        messageHtml: item.body_html || item.message_html || undefined,
         dossier: item.theme ? formatFolderName(item.theme) : 'Général',
         date: item.created_at,
-        masque: item.is_archived || false,
+        masque: item.is_visible === false,
         is_deleted: item.is_deleted || false,
         is_read: item.is_read || false,
       }));
@@ -86,7 +84,6 @@ export default function App() {
     }
   }, [isAuthenticated, fetchMessages]);
 
-  // Filtrage des messages par recherche textuelle et filtres avancés
   const filteredMessages = useMemo(() => {
     return messages.filter((msg) => {
       const query = searchTerm.toLowerCase().trim();
@@ -110,7 +107,6 @@ export default function App() {
     });
   }, [messages, searchTerm, filters]);
 
-  // Auto-sélection du premier message valide lors du changement de dossier ou filtrage
   useEffect(() => {
     if (!filteredMessages.length) {
       setSelectedMessageId(null);
@@ -199,7 +195,7 @@ export default function App() {
   };
 
   const handleReplyMessage = (msg: Message) => {
-    const rawContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
+    const rawContent = msg.message || '';
     setInitialComposeData({
       destinataire: msg.expediteur || msg.destinataire,
       objet: msg.objet?.startsWith('Re:') ? msg.objet : `Re: ${msg.objet || ''}`,
@@ -209,7 +205,7 @@ export default function App() {
   };
 
   const handleForwardMessage = (msg: Message) => {
-    const rawContent = msg.message || msg.messageHtml?.replace(/<[^>]*>?/gm, '') || '';
+    const rawContent = msg.message || '';
     setInitialComposeData({
       destinataire: '',
       objet: msg.objet?.startsWith('Fwd:') || msg.objet?.startsWith('Tr:') ? msg.objet : `Fwd: ${msg.objet || ''}`,
@@ -238,7 +234,7 @@ export default function App() {
   };
 
   const handleBulkMoveMessages = async (ids: string[], newFolder: string) => {
-    if (ids.length === 0) return;
+    if (!ids || ids.length === 0) return;
 
     const formattedFolder = formatFolderName(newFolder);
 
@@ -259,16 +255,21 @@ export default function App() {
   };
 
   const handleToggleHideMessage = async (id: string, currentStatus: boolean) => {
-    const newStatus = !currentStatus;
+    const newMasqueStatus = !currentStatus;
+    const newIsVisible = !newMasqueStatus;
 
-    const { error } = await supabase.from('messages').update({ is_archived: newStatus }).eq('id', id);
+    const { error } = await supabase
+      .from('messages')
+      .update({ is_visible: newIsVisible })
+      .eq('id', id);
+
     if (error) {
       console.error('Erreur lors du masquage/démasquage :', error.message);
       return;
     }
 
     setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, masque: newStatus } : m))
+      prev.map((m) => (m.id === id ? { ...m, masque: newMasqueStatus } : m))
     );
   };
 
@@ -306,9 +307,9 @@ export default function App() {
           message: inserted.body || '',
           dossier: formatFolderName(inserted.theme || 'Général'),
           date: inserted.created_at || new Date().toISOString(),
-          masque: false,
-          is_deleted: false,
-          is_read: true,
+          masque: inserted.is_visible === false,
+          is_deleted: inserted.is_deleted || false,
+          is_read: inserted.is_read || false,
         };
       } else {
         const payload = {
@@ -317,6 +318,8 @@ export default function App() {
           subject: newMsgData.objet,
           body: newMsgData.message,
           is_read: true,
+          is_visible: true,
+          is_deleted: false,
         };
 
         const { data, error } = await supabase.from('messages').insert([payload]).select();
@@ -336,9 +339,9 @@ export default function App() {
           message: inserted.body,
           dossier: formatFolderName(inserted.theme || 'Général'),
           date: inserted.created_at,
-          masque: false,
-          is_deleted: false,
-          is_read: true,
+          masque: inserted.is_visible === false,
+          is_deleted: inserted.is_deleted || false,
+          is_read: inserted.is_read || false,
         };
       }
 
