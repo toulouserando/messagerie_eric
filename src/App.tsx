@@ -17,10 +17,11 @@ import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 import { FileText, Mail, Trash2, Printer, Download, RefreshCw } from 'lucide-react';
 
-// Email de l'expéditeur principal (normalisé hors du composant)
-const MY_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
+// Configuration des adresses de l'utilisateur
+const MAIN_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
+const MY_EMAILS = [MAIN_EMAIL, 'ericgalaxy5@free.fr'];
 
-// Utilitaire de normalisation des noms de dossiers ("test" -> "Test", "général" -> "Général")
+// Normalisation des noms de dossiers ("test" -> "Test", "général" -> "Général")
 const formatFolderName = (folder: string): string => {
   if (!folder) return 'Général';
   const clean = folder.trim();
@@ -35,15 +36,15 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // ÉTAT DE LA VUE : 'messagerie' (classique) ou 'pages' (mode document)
+  // VUE : 'messagerie' (classique) ou 'pages' (mode document)
   const [viewMode, setViewMode] = useState<'messagerie' | 'pages'>('messagerie');
 
-  // DOSSIER ACTIF : 'général' par défaut
+  // DOSSIER ACTIF
   const [selectedFolderId, setSelectedFolderId] = useState<string>('général');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
 
-  // ÉTATS DE RECHERCHE & FILTRES
+  // RECHERCHE & FILTRES
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>({
     objet: '',
@@ -91,7 +92,9 @@ export default function App() {
 
       // Sélectionner le 1er message visible si la sélection courante n'est plus valide
       setSelectedMessageId((prevId) => {
-        const isStillValid = formattedMessages.some((m) => m.id === prevId && !m.masque && !m.is_deleted);
+        const isStillValid = formattedMessages.some(
+          (m) => m.id === prevId && !m.masque && !m.is_deleted
+        );
         if (isStillValid) return prevId;
         const visible = formattedMessages.filter((m) => !m.masque && !m.is_deleted);
         return visible.length > 0 ? visible[0].id : null;
@@ -120,7 +123,6 @@ export default function App() {
     }
   }, []);
 
-  // AUTO-MARK AS READ : Marque automatiquement comme lu lors de la sélection
   useEffect(() => {
     if (!selectedMessageId) return;
 
@@ -196,7 +198,6 @@ export default function App() {
       prev.map((m) => (m.id === id ? { ...m, dossier: formattedFolder } : m))
     );
 
-    // Désélectionner le message s'il quitte le dossier courant
     if (selectedMessageId === id && selectedFolderId.toLowerCase() !== formattedFolder.toLowerCase()) {
       setSelectedMessageId(null);
     }
@@ -222,7 +223,6 @@ export default function App() {
       prev.map((m) => (ids.includes(m.id) ? { ...m, dossier: formattedFolder } : m))
     );
 
-    // Désélectionner le message courant s'il fait partie de la sélection déplacée
     if (selectedMessageId && ids.includes(selectedMessageId) && selectedFolderId.toLowerCase() !== formattedFolder.toLowerCase()) {
       setSelectedMessageId(null);
     }
@@ -242,11 +242,19 @@ export default function App() {
   const handleToggleHideMessage = async (id: string, currentStatus: boolean) => {
     const newStatus = !currentStatus;
 
-    await supabase.from('messages').update({ is_archived: newStatus }).eq('id', id);
+    const { error } = await supabase.from('messages').update({ is_archived: newStatus }).eq('id', id);
+    if (error) {
+      console.error('Erreur lors du masquage/démasquage :', error.message);
+      return;
+    }
 
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, masque: newStatus } : m))
     );
+
+    if (selectedMessageId === id && selectedFolderId.toLowerCase() !== 'masques') {
+      setSelectedMessageId(null);
+    }
   };
 
   const handleSendMessage = async (newMsgData: Omit<Message, 'id' | 'date' | 'expediteur'>) => {
@@ -259,7 +267,7 @@ export default function App() {
           subject: newMsgData.objet,
           text: newMsgData.message,
           message: newMsgData.message,
-          expediteur: MY_EMAIL,
+          expediteur: MAIN_EMAIL,
         }),
       });
 
@@ -277,19 +285,19 @@ export default function App() {
         const inserted = resData.messageRecord;
         newMsg = {
           id: inserted.id,
-          expediteur: inserted.sender_email,
-          destinataire: inserted.recipient_email,
+          expediteur: inserted.sender_email || MAIN_EMAIL,
+          destinataire: inserted.recipient_email || newMsgData.destinataire,
           objet: inserted.subject || '',
-          message: inserted.body,
+          message: inserted.body || '',
           dossier: formatFolderName(inserted.theme || 'Général'),
-          date: inserted.created_at,
+          date: inserted.created_at || new Date().toISOString(),
           masque: false,
           is_deleted: false,
           is_read: true,
         };
       } else {
         const payload = {
-          sender_email: MY_EMAIL,
+          sender_email: MAIN_EMAIL,
           recipient_email: newMsgData.destinataire,
           subject: newMsgData.objet,
           body: newMsgData.message,
@@ -402,16 +410,21 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const filterByFolder = useCallback((msg: Message, folderId: string) => {
     const folderKey = folderId.toLowerCase().trim();
+    const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
+    const destinataireClean = (msg.destinataire || '').trim().toLowerCase();
+
+    const isSentByMe = MY_EMAILS.includes(expediteurClean);
+    const isToMe = MY_EMAILS.includes(destinataireClean);
 
     // 1. CORBEILLE
     if (folderKey === 'corbeille' || folderKey === 'trash') {
-      return msg.is_deleted;
+      return msg.is_deleted === true;
     }
     if (msg.is_deleted) return false;
 
     // 2. MASQUÉS
     if (folderKey === 'masques' || folderKey === 'messages masqués' || folderKey === 'archived') {
-      return msg.masque;
+      return msg.masque === true;
     }
     if (msg.masque) return false;
 
@@ -422,13 +435,16 @@ export default function App() {
 
     // 4. MESSAGES ENVOYÉS
     if (folderKey === 'envoyes' || folderKey === 'sent' || folderKey === 'messages envoyés') {
-      const expediteurClean = (msg.expediteur || '').trim().toLowerCase();
-      return expediteurClean === MY_EMAIL;
+      return isSentByMe;
     }
 
     // 5. DOSSIERS THÉMATIQUES (Général, Test, Sherpa, etc.)
     const msgDossierClean = (msg.dossier || 'Général').trim().toLowerCase();
-    return msgDossierClean === folderKey;
+    if (msgDossierClean === folderKey) {
+      return !isSentByMe || isToMe;
+    }
+
+    return false;
   }, []);
 
   const filteredMessages = useMemo(() => {

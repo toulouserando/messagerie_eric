@@ -61,9 +61,8 @@ export default function MessageList({
 }: MessageListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkFolder, setBulkFolder] = useState('');
 
-  // Réinitialisation lors d'un changement de dossier
+  // Réinitialisation de la sélection lors d'un changement de dossier
   useEffect(() => {
     setSelectedIds([]);
   }, [selectedFolderId]);
@@ -129,14 +128,12 @@ export default function MessageList({
     }
   };
 
-  // Sélection individuelle + Ouverture automatique dans le volet de lecture
+  // Sélection individuelle + Ouverture dans le volet de lecture
   const toggleSelectOne = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
-    
-    // Ouvre le message à droite
+
     onSelectMessage(msg);
 
-    // Bascule la coche
     setSelectedIds((prev) =>
       prev.includes(msg.id) ? prev.filter((i) => i !== msg.id) : [...prev, msg.id]
     );
@@ -146,19 +143,23 @@ export default function MessageList({
     if (selectedIds.length === finalFiltered.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(finalFiltered.map((msg) => msg.id));
+      const allIds = finalFiltered.map((msg) => msg.id);
+      setSelectedIds(allIds);
+      if (finalFiltered.length > 0) {
+        onSelectMessage(finalFiltered[0]);
+      }
     }
   };
 
   const handleBulkMove = (targetFolder: string) => {
     if (!targetFolder || selectedIds.length === 0) return;
+
     if (onBulkMoveMessages) {
       onBulkMoveMessages(selectedIds, targetFolder);
     } else if (onMoveMessage) {
       selectedIds.forEach((id) => onMoveMessage(id, targetFolder));
     }
     setSelectedIds([]);
-    setBulkFolder('');
   };
 
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
@@ -238,11 +239,12 @@ ${textContent}
               <div className="relative flex items-center">
                 <Folder className="w-3.5 h-3.5 absolute left-2 text-purple-700 pointer-events-none z-10" />
                 <select
-                  value={bulkFolder}
+                  value=""
                   onChange={(e) => {
                     const folder = e.target.value;
-                    setBulkFolder(folder);
-                    handleBulkMove(folder);
+                    if (folder) {
+                      handleBulkMove(folder);
+                    }
                   }}
                   className="pl-7 pr-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-md text-xs font-semibold cursor-pointer hover:bg-purple-100 transition-all focus:outline-none"
                 >
