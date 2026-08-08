@@ -1,16 +1,17 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import './App.css';
 import { Message } from './types';
 import LoginScreen from './components/LoginScreen';
 import Sidebar from './components/Sidebar';
 import MessageList from './components/MessageList';
 import MessageDetail from './components/MessageDetail';
-import NewMessageModal from './components/NewMessageModal';
 import SearchBar, { AdvancedFilters } from './components/SearchBar';
-import KeywordPagesView from './components/KeywordPagesView';
-import { AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 import { RefreshCw } from 'lucide-react';
+
+// Chargement différé pour réduire la taille du bundle initial
+const NewMessageModal = lazy(() => import('./components/NewMessageModal'));
+const KeywordPagesView = lazy(() => import('./components/KeywordPagesView'));
 
 const MAIN_EMAIL = (import.meta.env.VITE_SENDER_EMAIL || 'eric@ftstoulouse.online').trim().toLowerCase();
 const MY_EMAILS = [MAIN_EMAIL, 'ericgalaxy5@free.fr'];
@@ -85,13 +86,40 @@ export default function App() {
     }
   }, [isAuthenticated, fetchMessages]);
 
-  // Auto-sélection du premier message au changement de dossier ou mise à jour de la liste
+  // Filtrage des messages par recherche textuelle et filtres avancés
+  const filteredMessages = useMemo(() => {
+    return messages.filter((msg) => {
+      const query = searchTerm.toLowerCase().trim();
+      const matchSearch =
+        !query ||
+        msg.objet.toLowerCase().includes(query) ||
+        msg.message.toLowerCase().includes(query) ||
+        msg.expediteur.toLowerCase().includes(query) ||
+        msg.destinataire.toLowerCase().includes(query);
+
+      const matchObjet = !filters.objet || msg.objet.toLowerCase().includes(filters.objet.toLowerCase());
+      const matchMessage = !filters.message || msg.message.toLowerCase().includes(filters.message.toLowerCase());
+      const matchDest = !filters.destinataire || msg.destinataire.toLowerCase().includes(filters.destinataire.toLowerCase());
+      const matchExp = !filters.expediteur || msg.expediteur.toLowerCase().includes(filters.expediteur.toLowerCase());
+
+      const msgDate = new Date(msg.date).getTime();
+      const matchDateDebut = !filters.dateDebut || msgDate >= new Date(filters.dateDebut).getTime();
+      const matchDateFin = !filters.dateFin || msgDate <= new Date(filters.dateFin).getTime();
+
+      return matchSearch && matchObjet && matchMessage && matchDest && matchExp && matchDateDebut && matchDateFin;
+    });
+  }, [messages, searchTerm, filters]);
+
+  // Auto-sélection du premier message valide lors du changement de dossier ou filtrage
   useEffect(() => {
-    if (!messages.length) return;
+    if (!filteredMessages.length) {
+      setSelectedMessageId(null);
+      return;
+    }
 
     const folderKey = selectedFolderId.toLowerCase().trim();
 
-    const folderMessages = messages.filter((msg) => {
+    const folderMessages = filteredMessages.filter((msg) => {
       const isHidden = msg.masque === true;
       const isDeleted = msg.is_deleted === true;
       const expediteur = (msg.expediteur || '').toLowerCase().trim();
@@ -110,11 +138,12 @@ export default function App() {
       return (msg.dossier || 'Général').trim().toLowerCase() === folderKey;
     });
 
-    const isStillInFolder = folderMessages.some((m) => m.id === selectedMessageId);
-    if (!isStillInFolder) {
-      setSelectedMessageId(folderMessages.length > 0 ? folderMessages[0].id : null);
-    }
-  }, [selectedFolderId, messages, selectedMessageId]);
+    setSelectedMessageId((prevId) => {
+      const isStillInFolder = folderMessages.some((m) => m.id === prevId);
+      if (isStillInFolder) return prevId;
+      return folderMessages.length > 0 ? folderMessages[0].id : null;
+    });
+  }, [selectedFolderId, filteredMessages]);
 
   const markAsRead = useCallback(async (id: string) => {
     setMessages((prev) =>
@@ -396,7 +425,7 @@ export default function App() {
         selectedFolderId={selectedFolderId}
         onSelectFolder={(folderId) => setSelectedFolderId(folderId)}
         onNewMessage={handleOpenNewMessage}
-        messages={messages}
+        messages={filteredMessages}
         onLogout={handleLogout}
       />
 
@@ -450,39 +479,41 @@ export default function App() {
 
         {/* CONTENU PRINCIPAL */}
         <div className="flex-1 flex overflow-hidden">
-          {viewMode === 'messagerie' ? (
-            <>
-              <MessageList
-                messages={messages}
-                selectedFolderId={selectedFolderId}
-                selectedMessageId={selectedMessageId}
-                onSelectMessage={handleSelectMessage}
-                onDeleteMessage={handleDeleteMessage}
-                onToggleHideMessage={handleToggleHideMessage}
-                onToggleReadMessage={handleToggleReadMessage}
-                onMoveMessage={handleMoveMessageToFolder}
-                onBulkMoveMessages={handleBulkMoveMessages}
-              />
+          <Suspense fallback={<div className="p-4 text-sm text-gray-500">Chargement...</div>}>
+            {viewMode === 'messagerie' ? (
+              <>
+                <MessageList
+                  messages={filteredMessages}
+                  selectedFolderId={selectedFolderId}
+                  selectedMessageId={selectedMessageId}
+                  onSelectMessage={handleSelectMessage}
+                  onDeleteMessage={handleDeleteMessage}
+                  onToggleHideMessage={handleToggleHideMessage}
+                  onToggleReadMessage={handleToggleReadMessage}
+                  onMoveMessage={handleMoveMessageToFolder}
+                  onBulkMoveMessages={handleBulkMoveMessages}
+                />
 
-              <MessageDetail
-                message={selectedMessage}
-                onDeleteMessage={handleDeleteMessage}
-                onRestoreMessage={handleRestoreMessage}
-                onToggleHideMessage={handleToggleHideMessage}
-                onMoveMessage={handleMoveMessageToFolder}
-                onReply={handleReplyMessage}
-                onForward={handleForwardMessage}
-                onEmptyTrash={handleEmptyTrash}
-                selectedFolderId={selectedFolderId}
-              />
-            </>
-          ) : (
-            <KeywordPagesView messages={messages} />
-          )}
+                <MessageDetail
+                  message={selectedMessage}
+                  onDeleteMessage={handleDeleteMessage}
+                  onRestoreMessage={handleRestoreMessage}
+                  onToggleHideMessage={handleToggleHideMessage}
+                  onMoveMessage={handleMoveMessageToFolder}
+                  onReply={handleReplyMessage}
+                  onForward={handleForwardMessage}
+                  onEmptyTrash={handleEmptyTrash}
+                  selectedFolderId={selectedFolderId}
+                />
+              </>
+            ) : (
+              <KeywordPagesView messages={filteredMessages} />
+            )}
+          </Suspense>
         </div>
       </div>
 
-      <AnimatePresence>
+      <Suspense fallback={null}>
         {isComposeOpen && (
           <NewMessageModal
             isOpen={isComposeOpen}
@@ -491,7 +522,7 @@ export default function App() {
             initialData={initialComposeData}
           />
         )}
-      </AnimatePresence>
+      </Suspense>
     </div>
   );
 }
