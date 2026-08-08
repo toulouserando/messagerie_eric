@@ -75,7 +75,7 @@ export default function MessageList({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [targetFolder, setTargetFolder] = useState<string>('');
 
-  // Réinitialisation des sélections lors d'un changement de dossier
+  // Réinitialisation de la sélection UNIQUEMENT si le dossier change
   useEffect(() => {
     setSelectedIds([]);
   }, [selectedFolderId]);
@@ -119,7 +119,7 @@ export default function MessageList({
     });
   }, [messages, selectedFolderId, searchQuery]);
 
-  // Vérification si TOUS les messages actuellement affichés sont sélectionnés
+  // Vérification de la sélection complète de la vue actuelle
   const isAllSelected =
     finalFiltered.length > 0 && finalFiltered.every((msg) => selectedIds.includes(msg.id));
 
@@ -141,22 +141,24 @@ export default function MessageList({
   const handleBulkMove = async (folder: string) => {
     if (!folder || selectedIds.length === 0) return;
 
+    // Sauvegarde des IDs sélectionnés pour le traitement
     const idsToMove = [...selectedIds];
+
+    // Vider la sélection locale immédiatement pour l'interface
     setSelectedIds([]);
     setTargetFolder('');
 
     if (onBulkMoveMessages) {
-      // Exécution prioritaire de la fonction groupée du parent (Supabase bulk update)
+      // Envoie le tableau entier des IDs en une seule opération Supabase
       await onBulkMoveMessages(idsToMove, folder);
     } else if (onMoveMessage) {
-      // Si la prop groupée n'est pas transmise, exécuter les appels individuels en parallèle
+      // Fallback au cas où la fonction groupée n'est pas passée
       await Promise.all(idsToMove.map((id) => onMoveMessage(id, folder)));
     }
   };
 
   const handleDownloadSingleMessage = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
-
     const textContent = msg.message || stripHtml(msg.message);
 
     const content = `==================================================
